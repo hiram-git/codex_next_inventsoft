@@ -1,0 +1,135 @@
+---
+import { getSession, login } from '../lib/auth';
+import { store } from '../lib/store';
+import '../styles/global.css';
+
+// If already logged in, redirect
+const session = getSession(Astro.cookies);
+if (session) {
+  return Astro.redirect('/dashboard');
+}
+
+let error = '';
+
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const email = formData.get('email')?.toString() ?? '';
+  const password = formData.get('password')?.toString() ?? '';
+
+  const user = store.getUsuarioByEmail(email);
+  if (user && user.password === password && user.activo) {
+    login(Astro.cookies, user.id);
+    return Astro.redirect('/dashboard');
+  }
+  error = 'Credenciales inválidas. Intente nuevamente.';
+}
+---
+
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login - Admin Portal</title>
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-card">
+      <div class="login-header">
+        <div class="login-logo">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
+        </div>
+        <h1>Admin Portal</h1>
+        <p>Ingrese sus credenciales para acceder</p>
+      </div>
+
+      {error && <div class="alert alert-error">{error}</div>}
+
+      <form method="POST">
+        <div class="form-group">
+          <label for="email">Correo electrónico</label>
+          <input type="email" id="email" name="email" class="form-control" placeholder="correo@ejemplo.com" required />
+        </div>
+
+        <div class="form-group">
+          <label for="password">Contraseña</label>
+          <input type="password" id="password" name="password" class="form-control" placeholder="••••••••" required />
+        </div>
+
+        <button type="submit" class="btn btn-primary login-btn">
+          Iniciar Sesión
+        </button>
+      </form>
+
+      <div class="login-footer">
+        <p>Demo: admin@portal.com / admin123</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+
+<style>
+  .login-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
+    padding: 20px;
+  }
+
+  .login-card {
+    background: white;
+    border-radius: 16px;
+    padding: 40px;
+    width: 100%;
+    max-width: 420px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+  }
+
+  .login-header {
+    text-align: center;
+    margin-bottom: 32px;
+  }
+
+  .login-logo {
+    width: 64px;
+    height: 64px;
+    background: var(--primary-light);
+    color: var(--primary);
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+  }
+
+  .login-header h1 {
+    font-size: 1.5rem;
+    margin-bottom: 4px;
+  }
+
+  .login-header p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+  }
+
+  .login-btn {
+    width: 100%;
+    padding: 12px;
+    font-size: 1rem;
+    justify-content: center;
+    margin-top: 8px;
+  }
+
+  .login-footer {
+    text-align: center;
+    margin-top: 24px;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+  }
+</style>

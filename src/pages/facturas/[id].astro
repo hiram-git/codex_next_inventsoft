@@ -1,0 +1,112 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { store } from '../../lib/store';
+
+const { id } = Astro.params;
+const factura = store.getFactura(id ?? '');
+
+if (!factura) {
+  return Astro.redirect('/facturas');
+}
+---
+
+<AdminLayout title={`Factura ${factura.numero}`}>
+  <div class="page-header">
+    <h1>Factura {factura.numero}</h1>
+    <a href="/facturas" class="btn btn-secondary">
+      <span class="material-icons-round">arrow_back</span> Volver
+    </a>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="factura-info">
+      <div>
+        <h3 style="color:var(--text-muted);font-size:0.8rem;text-transform:uppercase">Cliente</h3>
+        <p style="font-weight:600">{factura.clienteNombre}</p>
+      </div>
+      <div>
+        <h3 style="color:var(--text-muted);font-size:0.8rem;text-transform:uppercase">Fecha</h3>
+        <p style="font-weight:600">{factura.fecha}</p>
+      </div>
+      <div>
+        <h3 style="color:var(--text-muted);font-size:0.8rem;text-transform:uppercase">Estado</h3>
+        <span class:list={['badge', {
+          'badge-success': factura.estado === 'pagada',
+          'badge-warning': factura.estado === 'pendiente',
+          'badge-danger': factura.estado === 'cancelada',
+        }]}>{factura.estado}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h2 style="font-size:1.1rem;margin-bottom:16px">Detalle de Productos</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Producto</th>
+          <th>P. Unitario</th>
+          <th>Cantidad</th>
+          <th>Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        {factura.items.map(item => (
+          <tr>
+            <td>{item.productoNombre}</td>
+            <td>${item.precioUnitario.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td>{item.cantidad}</td>
+            <td><strong>${item.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</strong></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="totals">
+      <div class="total-row">
+        <span>Subtotal:</span>
+        <span>${factura.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+      </div>
+      <div class="total-row">
+        <span>IVA (16%):</span>
+        <span>${factura.iva.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+      </div>
+      <div class="total-row total-final">
+        <span>Total:</span>
+        <span>${factura.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+      </div>
+    </div>
+  </div>
+</AdminLayout>
+
+<style>
+  .factura-info {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+  }
+
+  .totals {
+    max-width: 300px;
+    margin-left: auto;
+  }
+
+  .total-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    font-size: 0.95rem;
+  }
+
+  .total-row + .total-row {
+    border-top: 1px solid var(--border);
+  }
+
+  .total-final {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--primary);
+  }
+</style>

@@ -1,0 +1,14 @@
+{
+  "name": "admin-portal",
+  "type": "module",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/node": "^9.5.3",
+    "astro": "^5.2.0"
+  }
+}

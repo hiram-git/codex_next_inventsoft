@@ -1,0 +1,97 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { store } from '../../lib/store';
+
+let mensaje = '';
+let tipoMensaje = '';
+
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const action = formData.get('_action')?.toString();
+
+  if (action === 'update_estado') {
+    const id = formData.get('id')?.toString() ?? '';
+    const estado = formData.get('estado')?.toString() as 'pendiente' | 'pagada' | 'cancelada';
+    store.updateFactura(id, { estado });
+    mensaje = `Factura marcada como ${estado}.`;
+    tipoMensaje = 'success';
+  }
+}
+
+const facturas = store.getFacturas();
+---
+
+<AdminLayout title="Facturas">
+  <div class="page-header">
+    <h1>Facturas</h1>
+    <a href="/facturas/nueva" class="btn btn-primary">
+      <span class="material-icons-round">add</span> Nueva Factura
+    </a>
+  </div>
+
+  {mensaje && <div class={`alert alert-${tipoMensaje}`}>{mensaje}</div>}
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Número</th>
+          <th>Fecha</th>
+          <th>Cliente</th>
+          <th>Items</th>
+          <th>Total</th>
+          <th>Estado</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {facturas.map(f => (
+          <tr>
+            <td><strong>{f.numero}</strong></td>
+            <td>{f.fecha}</td>
+            <td>{f.clienteNombre}</td>
+            <td>{f.items.length} producto(s)</td>
+            <td><strong>${f.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</strong></td>
+            <td>
+              <span class:list={['badge', {
+                'badge-success': f.estado === 'pagada',
+                'badge-warning': f.estado === 'pendiente',
+                'badge-danger': f.estado === 'cancelada',
+              }]}>{f.estado}</span>
+            </td>
+            <td>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                <a href={`/facturas/${f.id}`} class="btn btn-primary btn-sm">
+                  <span class="material-icons-round" style="font-size:16px">visibility</span>
+                </a>
+                {f.estado === 'pendiente' && (
+                  <form method="POST" style="display:inline">
+                    <input type="hidden" name="_action" value="update_estado" />
+                    <input type="hidden" name="id" value={f.id} />
+                    <input type="hidden" name="estado" value="pagada" />
+                    <button type="submit" class="btn btn-success btn-sm" title="Marcar como pagada">
+                      <span class="material-icons-round" style="font-size:16px">check</span>
+                    </button>
+                  </form>
+                )}
+                {f.estado !== 'cancelada' && (
+                  <form method="POST" style="display:inline" onsubmit="return confirm('¿Cancelar esta factura?')">
+                    <input type="hidden" name="_action" value="update_estado" />
+                    <input type="hidden" name="id" value={f.id} />
+                    <input type="hidden" name="estado" value="cancelada" />
+                    <button type="submit" class="btn btn-danger btn-sm" title="Cancelar factura">
+                      <span class="material-icons-round" style="font-size:16px">cancel</span>
+                    </button>
+                  </form>
+                )}
+              </div>
+            </td>
+          </tr>
+        ))}
+        {facturas.length === 0 && (
+          <tr><td colspan="7" style="text-align:center;color:var(--text-muted)">No hay facturas registradas.</td></tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+</AdminLayout>

@@ -1,0 +1,208 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { store } from '../../lib/store';
+
+let mensaje = '';
+let tipoMensaje = '';
+
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const action = formData.get('_action')?.toString();
+
+  if (action === 'create' || action === 'update') {
+    const data = {
+      nombre: formData.get('nombre')?.toString() ?? '',
+      descripcion: formData.get('descripcion')?.toString() ?? '',
+      precio: parseFloat(formData.get('precio')?.toString() ?? '0'),
+      stock: parseInt(formData.get('stock')?.toString() ?? '0', 10),
+      categoria: formData.get('categoria')?.toString() ?? '',
+      activo: formData.get('activo') === 'on',
+    };
+
+    if (action === 'create') {
+      store.createProducto(data);
+      mensaje = 'Producto creado exitosamente.';
+    } else {
+      const id = formData.get('id')?.toString() ?? '';
+      store.updateProducto(id, data);
+      mensaje = 'Producto actualizado exitosamente.';
+    }
+    tipoMensaje = 'success';
+  }
+
+  if (action === 'delete') {
+    const id = formData.get('id')?.toString() ?? '';
+    store.deleteProducto(id);
+    mensaje = 'Producto eliminado.';
+    tipoMensaje = 'success';
+  }
+}
+
+const productos = store.getProductos();
+---
+
+<AdminLayout title="Productos">
+  <div class="page-header">
+    <h1>Productos</h1>
+    <button class="btn btn-primary" onclick="document.getElementById('modalCrear').style.display='flex'">
+      <span class="material-icons-round">add</span> Nuevo Producto
+    </button>
+  </div>
+
+  {mensaje && <div class={`alert alert-${tipoMensaje}`}>{mensaje}</div>}
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Categoría</th>
+          <th>Precio</th>
+          <th>Stock</th>
+          <th>Estado</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {productos.map(p => (
+          <tr>
+            <td>
+              <div>
+                <strong>{p.nombre}</strong>
+                <div style="font-size:0.8rem;color:var(--text-muted)">{p.descripcion}</div>
+              </div>
+            </td>
+            <td>{p.categoria}</td>
+            <td>${p.precio.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td>
+              <span class:list={['badge', {
+                'badge-success': p.stock >= 15,
+                'badge-warning': p.stock >= 5 && p.stock < 15,
+                'badge-danger': p.stock < 5,
+              }]}>{p.stock} uds</span>
+            </td>
+            <td>
+              <span class:list={['badge', p.activo ? 'badge-success' : 'badge-danger']}>
+                {p.activo ? 'Activo' : 'Inactivo'}
+              </span>
+            </td>
+            <td>
+              <div style="display:flex;gap:4px;">
+                <button class="btn btn-primary btn-sm"
+                  onclick={`openEdit('${p.id}','${p.nombre}','${p.descripcion}',${p.precio},${p.stock},'${p.categoria}',${p.activo})`}>
+                  <span class="material-icons-round" style="font-size:16px">edit</span>
+                </button>
+                <form method="POST" style="display:inline" onsubmit="return confirm('¿Eliminar este producto?')">
+                  <input type="hidden" name="_action" value="delete" />
+                  <input type="hidden" name="id" value={p.id} />
+                  <button type="submit" class="btn btn-danger btn-sm">
+                    <span class="material-icons-round" style="font-size:16px">delete</span>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        ))}
+        {productos.length === 0 && (
+          <tr><td colspan="6" style="text-align:center;color:var(--text-muted)">No hay productos registrados.</td></tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Modal Crear -->
+  <div class="modal-overlay" id="modalCrear" style="display:none">
+    <div class="modal">
+      <h2>Nuevo Producto</h2>
+      <form method="POST">
+        <input type="hidden" name="_action" value="create" />
+        <div class="form-group">
+          <label>Nombre</label>
+          <input type="text" name="nombre" class="form-control" required />
+        </div>
+        <div class="form-group">
+          <label>Descripción</label>
+          <textarea name="descripcion" class="form-control" rows="2"></textarea>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label>Precio</label>
+            <input type="number" name="precio" class="form-control" step="0.01" min="0" required />
+          </div>
+          <div class="form-group">
+            <label>Stock</label>
+            <input type="number" name="stock" class="form-control" min="0" required />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Categoría</label>
+          <input type="text" name="categoria" class="form-control" />
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" name="activo" checked /> Activo
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalCrear').style.display='none'">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Crear</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Editar -->
+  <div class="modal-overlay" id="modalEditar" style="display:none">
+    <div class="modal">
+      <h2>Editar Producto</h2>
+      <form method="POST">
+        <input type="hidden" name="_action" value="update" />
+        <input type="hidden" name="id" id="editId" />
+        <div class="form-group">
+          <label>Nombre</label>
+          <input type="text" name="nombre" id="editNombre" class="form-control" required />
+        </div>
+        <div class="form-group">
+          <label>Descripción</label>
+          <textarea name="descripcion" id="editDescripcion" class="form-control" rows="2"></textarea>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label>Precio</label>
+            <input type="number" name="precio" id="editPrecio" class="form-control" step="0.01" min="0" required />
+          </div>
+          <div class="form-group">
+            <label>Stock</label>
+            <input type="number" name="stock" id="editStock" class="form-control" min="0" required />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Categoría</label>
+          <input type="text" name="categoria" id="editCategoria" class="form-control" />
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" name="activo" id="editActivo" /> Activo
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalEditar').style.display='none'">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</AdminLayout>
+
+<script is:inline>
+  function openEdit(id, nombre, descripcion, precio, stock, categoria, activo) {
+    document.getElementById('editId').value = id;
+    document.getElementById('editNombre').value = nombre;
+    document.getElementById('editDescripcion').value = descripcion;
+    document.getElementById('editPrecio').value = precio;
+    document.getElementById('editStock').value = stock;
+    document.getElementById('editCategoria').value = categoria;
+    document.getElementById('editActivo').checked = activo;
+    document.getElementById('modalEditar').style.display = 'flex';
+  }
+</script>

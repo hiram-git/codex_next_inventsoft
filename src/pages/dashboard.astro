@@ -1,0 +1,193 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+import { store } from '../lib/store';
+
+const clientes = store.getClientes();
+const productos = store.getProductos();
+const facturas = store.getFacturas();
+
+const totalVentas = facturas
+  .filter(f => f.estado === 'pagada')
+  .reduce((sum, f) => sum + f.total, 0);
+
+const facturasPendientes = facturas.filter(f => f.estado === 'pendiente').length;
+const productosLowStock = productos.filter(p => p.stock < 15).length;
+---
+
+<AdminLayout title="Dashboard">
+  <div class="page-header">
+    <h1>Dashboard</h1>
+    <span class="date-label">{new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon" style="background: #dbeafe; color: #2563eb;">
+        <span class="material-icons-round">people</span>
+      </div>
+      <div class="stat-info">
+        <h3>{clientes.length}</h3>
+        <p>Clientes</p>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon" style="background: #dcfce7; color: #16a34a;">
+        <span class="material-icons-round">inventory</span>
+      </div>
+      <div class="stat-info">
+        <h3>{productos.length}</h3>
+        <p>Productos</p>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon" style="background: #fef3c7; color: #f59e0b;">
+        <span class="material-icons-round">receipt</span>
+      </div>
+      <div class="stat-info">
+        <h3>{facturas.length}</h3>
+        <p>Facturas</p>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon" style="background: #f3e8ff; color: #9333ea;">
+        <span class="material-icons-round">payments</span>
+      </div>
+      <div class="stat-info">
+        <h3>${totalVentas.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</h3>
+        <p>Ventas totales</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="dashboard-grid">
+    <div class="card">
+      <h2 class="card-title">
+        <span class="material-icons-round">warning</span>
+        Alertas
+      </h2>
+      <div class="alerts-list">
+        {facturasPendientes > 0 && (
+          <div class="alert-item warning">
+            <span class="material-icons-round">pending_actions</span>
+            <span>{facturasPendientes} factura(s) pendiente(s) de pago</span>
+          </div>
+        )}
+        {productosLowStock > 0 && (
+          <div class="alert-item danger">
+            <span class="material-icons-round">inventory_2</span>
+            <span>{productosLowStock} producto(s) con stock bajo</span>
+          </div>
+        )}
+        {facturasPendientes === 0 && productosLowStock === 0 && (
+          <div class="alert-item success">
+            <span class="material-icons-round">check_circle</span>
+            <span>Todo en orden. Sin alertas pendientes.</span>
+          </div>
+        )}
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">
+        <span class="material-icons-round">receipt_long</span>
+        Últimas Facturas
+      </h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Número</th>
+            <th>Cliente</th>
+            <th>Total</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {facturas.slice(-5).reverse().map(f => (
+            <tr>
+              <td>{f.numero}</td>
+              <td>{f.clienteNombre}</td>
+              <td>${f.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+              <td>
+                <span class:list={['badge', {
+                  'badge-success': f.estado === 'pagada',
+                  'badge-warning': f.estado === 'pendiente',
+                  'badge-danger': f.estado === 'cancelada',
+                }]}>{f.estado}</span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</AdminLayout>
+
+<style>
+  .date-label {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+  }
+
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 16px;
+  }
+
+  .card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1.1rem;
+    margin-bottom: 16px;
+    color: var(--text);
+  }
+
+  .card-title .material-icons-round {
+    font-size: 22px;
+    color: var(--primary);
+  }
+
+  .alerts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .alert-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+  }
+
+  .alert-item.warning {
+    background: #fef3c7;
+    color: #b45309;
+  }
+
+  .alert-item.danger {
+    background: #fecaca;
+    color: var(--danger);
+  }
+
+  .alert-item.success {
+    background: #dcfce7;
+    color: var(--success);
+  }
+
+  .alert-item .material-icons-round {
+    font-size: 20px;
+  }
+
+  @media (max-width: 900px) {
+    .dashboard-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

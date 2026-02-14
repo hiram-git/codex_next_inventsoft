@@ -1,0 +1,161 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { store } from '../../../lib/store';
+
+let mensaje = '';
+let tipoMensaje = '';
+
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const action = formData.get('_action')?.toString();
+
+  if (action === 'create' || action === 'update') {
+    const data = {
+      clave: formData.get('clave')?.toString() ?? '',
+      nombre: formData.get('nombre')?.toString() ?? '',
+      modulo: formData.get('modulo')?.toString() ?? '',
+    };
+
+    if (action === 'create') {
+      store.createPermiso(data);
+      mensaje = 'Permiso creado exitosamente.';
+    } else {
+      const id = formData.get('id')?.toString() ?? '';
+      store.updatePermiso(id, data);
+      mensaje = 'Permiso actualizado.';
+    }
+    tipoMensaje = 'success';
+  }
+
+  if (action === 'delete') {
+    const id = formData.get('id')?.toString() ?? '';
+    store.deletePermiso(id);
+    mensaje = 'Permiso eliminado.';
+    tipoMensaje = 'success';
+  }
+}
+
+const permisos = store.getPermisos();
+
+// Group by module
+const permisosByModulo: Record<string, typeof permisos> = {};
+permisos.forEach(p => {
+  if (!permisosByModulo[p.modulo]) permisosByModulo[p.modulo] = [];
+  permisosByModulo[p.modulo].push(p);
+});
+---
+
+<AdminLayout title="Permisos">
+  <div class="page-header">
+    <h1>Permisos</h1>
+    <button class="btn btn-primary" onclick="document.getElementById('modalCrear').style.display='flex'">
+      <span class="material-icons-round">add</span> Nuevo Permiso
+    </button>
+  </div>
+
+  {mensaje && <div class={`alert alert-${tipoMensaje}`}>{mensaje}</div>}
+
+  {Object.entries(permisosByModulo).map(([modulo, perms]) => (
+    <div class="card" style="margin-bottom:16px">
+      <h2 style="font-size:1rem;margin-bottom:12px;display:flex;align-items:center;gap:8px">
+        <span class="material-icons-round" style="font-size:20px;color:var(--primary)">lock</span>
+        {modulo}
+      </h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Clave</th>
+            <th>Nombre</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {perms.map(p => (
+            <tr>
+              <td><code style="background:var(--bg);padding:2px 8px;border-radius:4px;font-size:0.85rem">{p.clave}</code></td>
+              <td>{p.nombre}</td>
+              <td>
+                <div style="display:flex;gap:4px;">
+                  <button class="btn btn-primary btn-sm"
+                    onclick={`openEdit('${p.id}','${p.clave}','${p.nombre}','${p.modulo}')`}>
+                    <span class="material-icons-round" style="font-size:16px">edit</span>
+                  </button>
+                  <form method="POST" style="display:inline" onsubmit="return confirm('¿Eliminar este permiso?')">
+                    <input type="hidden" name="_action" value="delete" />
+                    <input type="hidden" name="id" value={p.id} />
+                    <button type="submit" class="btn btn-danger btn-sm">
+                      <span class="material-icons-round" style="font-size:16px">delete</span>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  ))}
+
+  <!-- Modal Crear -->
+  <div class="modal-overlay" id="modalCrear" style="display:none">
+    <div class="modal">
+      <h2>Nuevo Permiso</h2>
+      <form method="POST">
+        <input type="hidden" name="_action" value="create" />
+        <div class="form-group">
+          <label>Clave (ej: modulo.accion)</label>
+          <input type="text" name="clave" class="form-control" placeholder="clientes.ver" required />
+        </div>
+        <div class="form-group">
+          <label>Nombre</label>
+          <input type="text" name="nombre" class="form-control" placeholder="Ver clientes" required />
+        </div>
+        <div class="form-group">
+          <label>Módulo</label>
+          <input type="text" name="modulo" class="form-control" placeholder="Clientes" required />
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalCrear').style.display='none'">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Crear</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Editar -->
+  <div class="modal-overlay" id="modalEditar" style="display:none">
+    <div class="modal">
+      <h2>Editar Permiso</h2>
+      <form method="POST">
+        <input type="hidden" name="_action" value="update" />
+        <input type="hidden" name="id" id="editId" />
+        <div class="form-group">
+          <label>Clave</label>
+          <input type="text" name="clave" id="editClave" class="form-control" required />
+        </div>
+        <div class="form-group">
+          <label>Nombre</label>
+          <input type="text" name="nombre" id="editNombre" class="form-control" required />
+        </div>
+        <div class="form-group">
+          <label>Módulo</label>
+          <input type="text" name="modulo" id="editModulo" class="form-control" required />
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalEditar').style.display='none'">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</AdminLayout>
+
+<script is:inline>
+  function openEdit(id, clave, nombre, modulo) {
+    document.getElementById('editId').value = id;
+    document.getElementById('editClave').value = clave;
+    document.getElementById('editNombre').value = nombre;
+    document.getElementById('editModulo').value = modulo;
+    document.getElementById('modalEditar').style.display = 'flex';
+  }
+</script>

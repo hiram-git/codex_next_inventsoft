@@ -1,0 +1,208 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { store } from '../../../lib/store';
+
+let mensaje = '';
+let tipoMensaje = '';
+
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const action = formData.get('_action')?.toString();
+
+  if (action === 'create' || action === 'update') {
+    const data = {
+      nombre: formData.get('nombre')?.toString() ?? '',
+      email: formData.get('email')?.toString() ?? '',
+      password: formData.get('password')?.toString() ?? '',
+      rol: formData.get('rol')?.toString() ?? '',
+      activo: formData.get('activo') === 'on',
+    };
+
+    if (action === 'create') {
+      if (store.getUsuarioByEmail(data.email)) {
+        mensaje = 'Ya existe un usuario con ese email.';
+        tipoMensaje = 'error';
+      } else {
+        store.createUsuario(data);
+        mensaje = 'Usuario creado exitosamente.';
+        tipoMensaje = 'success';
+      }
+    } else {
+      const id = formData.get('id')?.toString() ?? '';
+      const updateData: Record<string, unknown> = {
+        nombre: data.nombre,
+        email: data.email,
+        rol: data.rol,
+        activo: data.activo,
+      };
+      if (data.password) {
+        updateData.password = data.password;
+      }
+      store.updateUsuario(id, updateData);
+      mensaje = 'Usuario actualizado.';
+      tipoMensaje = 'success';
+    }
+  }
+
+  if (action === 'delete') {
+    const id = formData.get('id')?.toString() ?? '';
+    store.deleteUsuario(id);
+    mensaje = 'Usuario eliminado.';
+    tipoMensaje = 'success';
+  }
+}
+
+const usuarios = store.getUsuarios();
+const roles = store.getRoles();
+---
+
+<AdminLayout title="Usuarios">
+  <div class="page-header">
+    <h1>Usuarios</h1>
+    <button class="btn btn-primary" onclick="document.getElementById('modalCrear').style.display='flex'">
+      <span class="material-icons-round">add</span> Nuevo Usuario
+    </button>
+  </div>
+
+  {mensaje && <div class={`alert alert-${tipoMensaje}`}>{mensaje}</div>}
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Email</th>
+          <th>Rol</th>
+          <th>Estado</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {usuarios.map(u => (
+          <tr>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="width:32px;height:32px;background:var(--primary);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.8rem">
+                  {u.nombre.charAt(0).toUpperCase()}
+                </div>
+                {u.nombre}
+              </div>
+            </td>
+            <td>{u.email}</td>
+            <td><span class="badge badge-success">{u.rol}</span></td>
+            <td>
+              <span class:list={['badge', u.activo ? 'badge-success' : 'badge-danger']}>
+                {u.activo ? 'Activo' : 'Inactivo'}
+              </span>
+            </td>
+            <td>
+              <div style="display:flex;gap:4px;">
+                <button class="btn btn-primary btn-sm"
+                  onclick={`openEdit('${u.id}','${u.nombre}','${u.email}','${u.rol}',${u.activo})`}>
+                  <span class="material-icons-round" style="font-size:16px">edit</span>
+                </button>
+                <form method="POST" style="display:inline" onsubmit="return confirm('¿Eliminar este usuario?')">
+                  <input type="hidden" name="_action" value="delete" />
+                  <input type="hidden" name="id" value={u.id} />
+                  <button type="submit" class="btn btn-danger btn-sm">
+                    <span class="material-icons-round" style="font-size:16px">delete</span>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Modal Crear -->
+  <div class="modal-overlay" id="modalCrear" style="display:none">
+    <div class="modal">
+      <h2>Nuevo Usuario</h2>
+      <form method="POST">
+        <input type="hidden" name="_action" value="create" />
+        <div class="form-group">
+          <label>Nombre</label>
+          <input type="text" name="nombre" class="form-control" required />
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" name="email" class="form-control" required />
+        </div>
+        <div class="form-group">
+          <label>Contraseña</label>
+          <input type="password" name="password" class="form-control" required />
+        </div>
+        <div class="form-group">
+          <label>Rol</label>
+          <select name="rol" class="form-control" required>
+            {roles.map(r => (
+              <option value={r.nombre}>{r.nombre}</option>
+            ))}
+          </select>
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" name="activo" checked /> Activo
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalCrear').style.display='none'">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Crear</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Editar -->
+  <div class="modal-overlay" id="modalEditar" style="display:none">
+    <div class="modal">
+      <h2>Editar Usuario</h2>
+      <form method="POST">
+        <input type="hidden" name="_action" value="update" />
+        <input type="hidden" name="id" id="editId" />
+        <div class="form-group">
+          <label>Nombre</label>
+          <input type="text" name="nombre" id="editNombre" class="form-control" required />
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" name="email" id="editEmail" class="form-control" required />
+        </div>
+        <div class="form-group">
+          <label>Contraseña (dejar vacío para mantener)</label>
+          <input type="password" name="password" class="form-control" />
+        </div>
+        <div class="form-group">
+          <label>Rol</label>
+          <select name="rol" id="editRol" class="form-control" required>
+            {roles.map(r => (
+              <option value={r.nombre}>{r.nombre}</option>
+            ))}
+          </select>
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" name="activo" id="editActivo" /> Activo
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalEditar').style.display='none'">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</AdminLayout>
+
+<script is:inline>
+  function openEdit(id, nombre, email, rol, activo) {
+    document.getElementById('editId').value = id;
+    document.getElementById('editNombre').value = nombre;
+    document.getElementById('editEmail').value = email;
+    document.getElementById('editRol').value = rol;
+    document.getElementById('editActivo').checked = activo;
+    document.getElementById('modalEditar').style.display = 'flex';
+  }
+</script>

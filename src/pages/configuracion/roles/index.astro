@@ -1,0 +1,234 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { store } from '../../../lib/store';
+
+let mensaje = '';
+let tipoMensaje = '';
+
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const action = formData.get('_action')?.toString();
+
+  if (action === 'create' || action === 'update') {
+    const permisosSeleccionados = formData.getAll('permisos').map(p => p.toString());
+    const data = {
+      nombre: formData.get('nombre')?.toString() ?? '',
+      descripcion: formData.get('descripcion')?.toString() ?? '',
+      permisos: permisosSeleccionados,
+    };
+
+    if (action === 'create') {
+      store.createRol(data);
+      mensaje = 'Rol creado exitosamente.';
+    } else {
+      const id = formData.get('id')?.toString() ?? '';
+      store.updateRol(id, data);
+      mensaje = 'Rol actualizado.';
+    }
+    tipoMensaje = 'success';
+  }
+
+  if (action === 'delete') {
+    const id = formData.get('id')?.toString() ?? '';
+    store.deleteRol(id);
+    mensaje = 'Rol eliminado.';
+    tipoMensaje = 'success';
+  }
+}
+
+const roles = store.getRoles();
+const permisos = store.getPermisos();
+const permisosByModulo: Record<string, typeof permisos> = {};
+permisos.forEach(p => {
+  if (!permisosByModulo[p.modulo]) permisosByModulo[p.modulo] = [];
+  permisosByModulo[p.modulo].push(p);
+});
+---
+
+<AdminLayout title="Roles">
+  <div class="page-header">
+    <h1>Roles</h1>
+    <button class="btn btn-primary" onclick="document.getElementById('modalCrear').style.display='flex'">
+      <span class="material-icons-round">add</span> Nuevo Rol
+    </button>
+  </div>
+
+  {mensaje && <div class={`alert alert-${tipoMensaje}`}>{mensaje}</div>}
+
+  <div class="roles-grid">
+    {roles.map(rol => (
+      <div class="card role-card">
+        <div class="role-header">
+          <div>
+            <h3>{rol.nombre}</h3>
+            <p style="font-size:0.85rem;color:var(--text-muted)">{rol.descripcion}</p>
+          </div>
+          <div style="display:flex;gap:4px">
+            <button class="btn btn-primary btn-sm"
+              onclick={`openEdit('${rol.id}','${rol.nombre}','${rol.descripcion}','${JSON.stringify(rol.permisos)}')`}>
+              <span class="material-icons-round" style="font-size:16px">edit</span>
+            </button>
+            <form method="POST" style="display:inline" onsubmit="return confirm('¿Eliminar este rol?')">
+              <input type="hidden" name="_action" value="delete" />
+              <input type="hidden" name="id" value={rol.id} />
+              <button type="submit" class="btn btn-danger btn-sm">
+                <span class="material-icons-round" style="font-size:16px">delete</span>
+              </button>
+            </form>
+          </div>
+        </div>
+        <div class="permisos-list">
+          <span style="font-size:0.8rem;color:var(--text-muted);font-weight:600">{rol.permisos.length} permisos asignados:</span>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">
+            {rol.permisos.map(p => (
+              <span class="badge badge-success">{p}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+    ))}
+  </div>
+
+  <!-- Modal Crear -->
+  <div class="modal-overlay" id="modalCrear" style="display:none">
+    <div class="modal" style="max-width:600px">
+      <h2>Nuevo Rol</h2>
+      <form method="POST">
+        <input type="hidden" name="_action" value="create" />
+        <div class="form-group">
+          <label>Nombre del Rol</label>
+          <input type="text" name="nombre" class="form-control" required />
+        </div>
+        <div class="form-group">
+          <label>Descripción</label>
+          <input type="text" name="descripcion" class="form-control" />
+        </div>
+        <div class="form-group">
+          <label>Permisos</label>
+          {Object.entries(permisosByModulo).map(([modulo, perms]) => (
+            <div class="permiso-modulo">
+              <strong>{modulo}</strong>
+              <div class="permiso-checks">
+                {perms.map(p => (
+                  <label class="check-label">
+                    <input type="checkbox" name="permisos" value={p.clave} />
+                    {p.nombre}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalCrear').style.display='none'">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Crear</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Editar -->
+  <div class="modal-overlay" id="modalEditar" style="display:none">
+    <div class="modal" style="max-width:600px">
+      <h2>Editar Rol</h2>
+      <form method="POST" id="editForm">
+        <input type="hidden" name="_action" value="update" />
+        <input type="hidden" name="id" id="editId" />
+        <div class="form-group">
+          <label>Nombre del Rol</label>
+          <input type="text" name="nombre" id="editNombre" class="form-control" required />
+        </div>
+        <div class="form-group">
+          <label>Descripción</label>
+          <input type="text" name="descripcion" id="editDescripcion" class="form-control" />
+        </div>
+        <div class="form-group">
+          <label>Permisos</label>
+          {Object.entries(permisosByModulo).map(([modulo, perms]) => (
+            <div class="permiso-modulo">
+              <strong>{modulo}</strong>
+              <div class="permiso-checks">
+                {perms.map(p => (
+                  <label class="check-label">
+                    <input type="checkbox" name="permisos" value={p.clave} class="edit-permiso" />
+                    {p.nombre}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalEditar').style.display='none'">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</AdminLayout>
+
+<style>
+  .roles-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+    gap: 16px;
+  }
+
+  .role-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+  }
+
+  .role-header h3 {
+    font-size: 1.1rem;
+  }
+
+  .permisos-list {
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+  }
+
+  .permiso-modulo {
+    margin-bottom: 12px;
+    padding: 8px;
+    background: var(--bg);
+    border-radius: var(--radius);
+  }
+
+  .permiso-modulo strong {
+    font-size: 0.85rem;
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  .permiso-checks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .check-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+</style>
+
+<script is:inline>
+  function openEdit(id, nombre, descripcion, permisosJson) {
+    document.getElementById('editId').value = id;
+    document.getElementById('editNombre').value = nombre;
+    document.getElementById('editDescripcion').value = descripcion;
+
+    const permisos = JSON.parse(permisosJson);
+    document.querySelectorAll('.edit-permiso').forEach(cb => {
+      cb.checked = permisos.includes(cb.value);
+    });
+
+    document.getElementById('modalEditar').style.display = 'flex';
+  }
+</script>

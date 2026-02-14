@@ -19,11 +19,11 @@ if (Astro.request.method === 'POST') {
     };
 
     if (action === 'create') {
-      if (store.getUsuarioByEmail(data.email)) {
+      if (await store.getUsuarioByEmail(data.email)) {
         mensaje = 'Ya existe un usuario con ese email.';
         tipoMensaje = 'error';
       } else {
-        store.createUsuario(data);
+        await store.createUsuario(data);
         mensaje = 'Usuario creado exitosamente.';
         tipoMensaje = 'success';
       }
@@ -38,7 +38,7 @@ if (Astro.request.method === 'POST') {
       if (data.password) {
         updateData.password = data.password;
       }
-      store.updateUsuario(id, updateData);
+      await store.updateUsuario(id, updateData);
       mensaje = 'Usuario actualizado.';
       tipoMensaje = 'success';
     }
@@ -46,14 +46,16 @@ if (Astro.request.method === 'POST') {
 
   if (action === 'delete') {
     const id = formData.get('id')?.toString() ?? '';
-    store.deleteUsuario(id);
+    await store.deleteUsuario(id);
     mensaje = 'Usuario eliminado.';
     tipoMensaje = 'success';
   }
 }
 
-const usuarios = store.getUsuarios();
-const roles = store.getRoles();
+const [usuarios, roles] = await Promise.all([
+  store.getUsuarios(),
+  store.getRoles(),
+]);
 ---
 
 <AdminLayout title="Usuarios">

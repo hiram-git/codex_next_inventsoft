@@ -7,7 +7,7 @@ let error = '';
 if (Astro.request.method === 'POST') {
   const formData = await Astro.request.formData();
   const clienteId = formData.get('clienteId')?.toString() ?? '';
-  const cliente = store.getCliente(clienteId);
+  const cliente = await store.getCliente(clienteId);
 
   if (!cliente) {
     error = 'Seleccione un cliente válido.';
@@ -28,7 +28,7 @@ if (Astro.request.method === 'POST') {
       const iva = subtotal * 0.16;
       const total = subtotal + iva;
 
-      store.createFactura({
+      await store.createFactura({
         clienteId,
         clienteNombre: cliente.nombre,
         items,
@@ -44,8 +44,11 @@ if (Astro.request.method === 'POST') {
   }
 }
 
-const clientes = store.getClientes();
-const productos = store.getProductos().filter(p => p.activo);
+const [clientes, allProductos] = await Promise.all([
+  store.getClientes(),
+  store.getProductos(),
+]);
+const productos = allProductos.filter(p => p.activo);
 ---
 
 <AdminLayout title="Nueva Factura">

@@ -12,13 +12,13 @@ if (Astro.request.method === 'POST') {
   if (action === 'update_estado') {
     const id = formData.get('id')?.toString() ?? '';
     const estado = formData.get('estado')?.toString() as 'pendiente' | 'pagada' | 'cancelada';
-    store.updateFactura(id, { estado });
+    await store.updateFactura(id, { estado });
     mensaje = `Factura marcada como ${estado}.`;
     tipoMensaje = 'success';
   }
 }
 
-const facturas = store.getFacturas();
+const facturas = await store.getFacturas();
 ---
 
 <AdminLayout title="Facturas">

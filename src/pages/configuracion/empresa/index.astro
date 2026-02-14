@@ -6,7 +6,7 @@ let mensaje = '';
 
 if (Astro.request.method === 'POST') {
   const formData = await Astro.request.formData();
-  store.updateEmpresa({
+  await store.updateEmpresa({
     nombre: formData.get('nombre')?.toString() ?? '',
     rfc: formData.get('rfc')?.toString() ?? '',
     direccion: formData.get('direccion')?.toString() ?? '',
@@ -16,7 +16,7 @@ if (Astro.request.method === 'POST') {
   mensaje = 'Datos de la empresa actualizados.';
 }
 
-const empresa = store.getEmpresa();
+const empresa = await store.getEmpresa();
 ---
 
 <AdminLayout title="Datos de Empresa">

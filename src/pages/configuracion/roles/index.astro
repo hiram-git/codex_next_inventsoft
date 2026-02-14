@@ -18,11 +18,11 @@ if (Astro.request.method === 'POST') {
     };
 
     if (action === 'create') {
-      store.createRol(data);
+      await store.createRol(data);
       mensaje = 'Rol creado exitosamente.';
     } else {
       const id = formData.get('id')?.toString() ?? '';
-      store.updateRol(id, data);
+      await store.updateRol(id, data);
       mensaje = 'Rol actualizado.';
     }
     tipoMensaje = 'success';
@@ -30,14 +30,16 @@ if (Astro.request.method === 'POST') {
 
   if (action === 'delete') {
     const id = formData.get('id')?.toString() ?? '';
-    store.deleteRol(id);
+    await store.deleteRol(id);
     mensaje = 'Rol eliminado.';
     tipoMensaje = 'success';
   }
 }
 
-const roles = store.getRoles();
-const permisos = store.getPermisos();
+const [roles, permisos] = await Promise.all([
+  store.getRoles(),
+  store.getPermisos(),
+]);
 const permisosByModulo: Record<string, typeof permisos> = {};
 permisos.forEach(p => {
   if (!permisosByModulo[p.modulo]) permisosByModulo[p.modulo] = [];

@@ -3,7 +3,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 import { store } from '../../lib/store';
 
 const { id } = Astro.params;
-const factura = store.getFactura(id ?? '');
+const factura = await store.getFactura(id ?? '');
 
 if (!factura) {
   return Astro.redirect('/facturas');

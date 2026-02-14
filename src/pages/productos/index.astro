@@ -20,11 +20,11 @@ if (Astro.request.method === 'POST') {
     };
 
     if (action === 'create') {
-      store.createProducto(data);
+      await store.createProducto(data);
       mensaje = 'Producto creado exitosamente.';
     } else {
       const id = formData.get('id')?.toString() ?? '';
-      store.updateProducto(id, data);
+      await store.updateProducto(id, data);
       mensaje = 'Producto actualizado exitosamente.';
     }
     tipoMensaje = 'success';
@@ -32,13 +32,13 @@ if (Astro.request.method === 'POST') {
 
   if (action === 'delete') {
     const id = formData.get('id')?.toString() ?? '';
-    store.deleteProducto(id);
+    await store.deleteProducto(id);
     mensaje = 'Producto eliminado.';
     tipoMensaje = 'success';
   }
 }
 
-const productos = store.getProductos();
+const productos = await store.getProductos();
 ---
 
 <AdminLayout title="Productos">

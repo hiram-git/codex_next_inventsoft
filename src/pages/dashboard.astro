@@ -2,9 +2,11 @@
 import AdminLayout from '../layouts/AdminLayout.astro';
 import { store } from '../lib/store';
 
-const clientes = store.getClientes();
-const productos = store.getProductos();
-const facturas = store.getFacturas();
+const [clientes, productos, facturas] = await Promise.all([
+  store.getClientes(),
+  store.getProductos(),
+  store.getFacturas(),
+]);
 
 const totalVentas = facturas
   .filter(f => f.estado === 'pagada')

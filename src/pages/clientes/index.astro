@@ -19,11 +19,11 @@ if (Astro.request.method === 'POST') {
     };
 
     if (action === 'create') {
-      store.createCliente(data);
+      await store.createCliente(data);
       mensaje = 'Cliente creado exitosamente.';
     } else {
       const id = formData.get('id')?.toString() ?? '';
-      store.updateCliente(id, data);
+      await store.updateCliente(id, data);
       mensaje = 'Cliente actualizado exitosamente.';
     }
     tipoMensaje = 'success';
@@ -31,13 +31,13 @@ if (Astro.request.method === 'POST') {
 
   if (action === 'delete') {
     const id = formData.get('id')?.toString() ?? '';
-    store.deleteCliente(id);
+    await store.deleteCliente(id);
     mensaje = 'Cliente eliminado.';
     tipoMensaje = 'success';
   }
 }
 
-const clientes = store.getClientes();
+const clientes = await store.getClientes();
 ---
 
 <AdminLayout title="Clientes">

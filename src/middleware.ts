@@ -10,7 +10,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   // Check session for all other routes
-  const session = getSession(context.cookies);
+  const session = await getSession(context.cookies);
   if (!session) {
     return context.redirect('/login');
   }

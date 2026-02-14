@@ -4,7 +4,7 @@ import { store } from '../lib/store';
 import '../styles/global.css';
 
 // If already logged in, redirect
-const session = getSession(Astro.cookies);
+const session = await getSession(Astro.cookies);
 if (session) {
   return Astro.redirect('/dashboard');
 }
@@ -16,7 +16,7 @@ if (Astro.request.method === 'POST') {
   const email = formData.get('email')?.toString() ?? '';
   const password = formData.get('password')?.toString() ?? '';
 
-  const user = store.getUsuarioByEmail(email);
+  const user = await store.getUsuarioByEmail(email);
   if (user && user.password === password && user.activo) {
     login(Astro.cookies, user.id);
     return Astro.redirect('/dashboard');

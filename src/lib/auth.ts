@@ -16,10 +16,10 @@ export function logout(cookies: AstroCookies) {
   cookies.delete(SESSION_COOKIE, { path: '/' });
 }
 
-export function getSession(cookies: AstroCookies) {
+export async function getSession(cookies: AstroCookies) {
   const userId = cookies.get(SESSION_COOKIE)?.value;
   if (!userId) return null;
-  const user = store.getUsuario(userId);
+  const user = await store.getUsuario(userId);
   if (!user || !user.activo) return null;
   return { id: user.id, nombre: user.nombre, email: user.email, rol: user.rol };
 }

@@ -17,11 +17,11 @@ if (Astro.request.method === 'POST') {
     };
 
     if (action === 'create') {
-      store.createPermiso(data);
+      await store.createPermiso(data);
       mensaje = 'Permiso creado exitosamente.';
     } else {
       const id = formData.get('id')?.toString() ?? '';
-      store.updatePermiso(id, data);
+      await store.updatePermiso(id, data);
       mensaje = 'Permiso actualizado.';
     }
     tipoMensaje = 'success';
@@ -29,13 +29,13 @@ if (Astro.request.method === 'POST') {
 
   if (action === 'delete') {
     const id = formData.get('id')?.toString() ?? '';
-    store.deletePermiso(id);
+    await store.deletePermiso(id);
     mensaje = 'Permiso eliminado.';
     tipoMensaje = 'success';
   }
 }
 
-const permisos = store.getPermisos();
+const permisos = await store.getPermisos();
 
 // Group by module
 const permisosByModulo: Record<string, typeof permisos> = {};

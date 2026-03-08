@@ -67,8 +67,25 @@ export const facturas = pgTable('facturas', {
   subtotal: numeric('subtotal', { precision: 12, scale: 2 }).notNull(),
   iva: numeric('iva', { precision: 12, scale: 2 }).notNull(),
   total: numeric('total', { precision: 12, scale: 2 }).notNull(),
-  estado: varchar('estado', { length: 20 }).notNull().default('pendiente'),
+  estado: varchar('estado', { length: 20 }).notNull().default('pendiente'), // pendiente | parcial | pagada | cancelada | vencida
   fecha: date('fecha').defaultNow().notNull(),
+  fechaVencimiento: date('fecha_vencimiento'),
+});
+
+// --- Cobros (pagos aplicados a facturas) ---
+export const cobros = pgTable('cobros', {
+  id: serial('id').primaryKey(),
+  numero: varchar('numero', { length: 20 }).notNull().unique(),
+  facturaId: integer('factura_id').notNull(),
+  facturaNumero: varchar('factura_numero', { length: 20 }).notNull(),
+  clienteId: integer('cliente_id').notNull(),
+  clienteNombre: varchar('cliente_nombre', { length: 300 }).notNull(),
+  monto: numeric('monto', { precision: 12, scale: 2 }).notNull(),
+  fecha: date('fecha').defaultNow().notNull(),
+  metodoPago: varchar('metodo_pago', { length: 50 }).notNull().default('efectivo'), // efectivo | transferencia | cheque | tarjeta
+  referencia: varchar('referencia', { length: 100 }).default(''), // Nro cheque, Nro transferencia
+  notas: text('notas').default(''),
+  estado: varchar('estado', { length: 20 }).notNull().default('aplicado'), // aplicado | anulado
 });
 
 // --- Empresa (config singleton, 1 row) ---

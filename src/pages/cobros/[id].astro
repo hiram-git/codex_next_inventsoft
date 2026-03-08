@@ -1,0 +1,190 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { store } from '../../lib/store';
+
+const { id } = Astro.params;
+let error = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = form.get('action')?.toString();
+  if (action === 'anular') {
+    const result = await store.anularCobro(id!);
+    if (!result.ok) error = result.error ?? 'Error al anular cobro';
+  }
+}
+
+const cobro = await store.getCobro(id!);
+if (!cobro) return Astro.redirect('/cobros');
+
+const factura = await store.getFactura(cobro.facturaId);
+
+const metodoPagoLabel: Record<string, string> = {
+  efectivo: 'Efectivo',
+  transferencia: 'Transferencia bancaria',
+  cheque: 'Cheque',
+  tarjeta: 'Tarjeta',
+};
+---
+
+<AdminLayout title={`Cobro ${cobro.numero}`}>
+  <div class="page-header">
+    <div>
+      <h1>{cobro.numero}</h1>
+      <span class:list={['badge', cobro.estado === 'aplicado' ? 'badge-success' : 'badge-danger']}>
+        {cobro.estado === 'aplicado' ? 'Aplicado' : 'Anulado'}
+      </span>
+    </div>
+    <a href="/cobros" class="btn btn-outline">
+      <span class="material-icons-round">arrow_back</span>
+      Volver
+    </a>
+  </div>
+
+  {error && (
+    <div class="alert alert-danger">
+      <span class="material-icons-round">error</span>
+      {error}
+    </div>
+  )}
+
+  <div class="layout">
+    <div class="card">
+      <h2>Detalle del Cobro</h2>
+      <div class="info-grid">
+        <div class="info-item">
+          <span class="info-label">Número</span>
+          <span class="info-value">{cobro.numero}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Fecha</span>
+          <span class="info-value">{cobro.fecha}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Cliente</span>
+          <span class="info-value">{cobro.clienteNombre}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Factura</span>
+          <span class="info-value">
+            <a href={`/facturas/${cobro.facturaId}`} class="link">{cobro.facturaNumero}</a>
+          </span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Método de Pago</span>
+          <span class="info-value">{metodoPagoLabel[cobro.metodoPago] ?? cobro.metodoPago}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Referencia</span>
+          <span class="info-value">{cobro.referencia || '—'}</span>
+        </div>
+        {cobro.notas && (
+          <div class="info-item full-width">
+            <span class="info-label">Notas</span>
+            <span class="info-value">{cobro.notas}</span>
+          </div>
+        )}
+      </div>
+
+      <div class="monto-box">
+        <span class="monto-label">Monto cobrado</span>
+        <span class="monto-value">${cobro.monto.toFixed(2)}</span>
+      </div>
+
+      {cobro.estado === 'aplicado' && (
+        <div class="actions">
+          <button class="btn btn-danger" onclick="document.getElementById('modalAnular').showModal()">
+            <span class="material-icons-round">cancel</span>
+            Anular Cobro
+          </button>
+        </div>
+      )}
+    </div>
+
+    {factura && (
+      <div class="card">
+        <h2>Estado de la Factura</h2>
+        <div class="factura-info">
+          <div class="factura-row">
+            <span>Número</span>
+            <a href={`/facturas/${factura.id}`} class="link">{factura.numero}</a>
+          </div>
+          <div class="factura-row">
+            <span>Total factura</span>
+            <strong>${factura.total.toFixed(2)}</strong>
+          </div>
+          <div class="factura-row">
+            <span>Estado</span>
+            <span class:list={['badge',
+              factura.estado === 'pagada' ? 'badge-success' :
+              factura.estado === 'parcial' ? 'badge-warning' :
+              factura.estado === 'cancelada' ? 'badge-danger' :
+              factura.estado === 'vencida' ? 'badge-danger' : 'badge-info'
+            ]}>
+              {factura.estado.charAt(0).toUpperCase() + factura.estado.slice(1)}
+            </span>
+          </div>
+          {factura.fechaVencimiento && (
+            <div class="factura-row">
+              <span>Vencimiento</span>
+              <span>{factura.fechaVencimiento}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+  </div>
+
+  <!-- Anular modal -->
+  <dialog id="modalAnular">
+    <div class="modal-content">
+      <h3>¿Anular este cobro?</h3>
+      <p>El cobro <strong>{cobro.numero}</strong> por <strong>${cobro.monto.toFixed(2)}</strong> será marcado como anulado y el saldo de la factura será recalculado.</p>
+      <form method="POST" class="modal-actions">
+        <input type="hidden" name="action" value="anular" />
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('modalAnular').close()">Cancelar</button>
+        <button type="submit" class="btn btn-danger">Confirmar anulación</button>
+      </form>
+    </div>
+  </dialog>
+</AdminLayout>
+
+<style>
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; gap: 12px; }
+  h1 { font-size: 1.5rem; font-weight: 700; margin: 0 0 8px; }
+  h2 { font-size: 1rem; font-weight: 600; margin: 0 0 16px; }
+  .layout { display: grid; grid-template-columns: 1fr 360px; gap: 16px; }
+  .card { background: white; border-radius: var(--radius); border: 1px solid var(--border); padding: 24px; }
+  .alert { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-radius: var(--radius); margin-bottom: 16px; font-size: 0.875rem; }
+  .alert-danger { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .info-item { display: flex; flex-direction: column; gap: 4px; }
+  .full-width { grid-column: 1 / -1; }
+  .info-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .info-value { font-size: 0.9rem; font-weight: 500; }
+  .monto-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius); padding: 20px; text-align: center; margin-bottom: 20px; }
+  .monto-label { display: block; font-size: 0.8rem; color: #3b82f6; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  .monto-value { font-size: 2rem; font-weight: 700; color: #1d4ed8; }
+  .actions { display: flex; justify-content: flex-end; }
+  .factura-info { display: flex; flex-direction: column; gap: 12px; }
+  .factura-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 0.875rem; }
+  .factura-row:last-child { border-bottom: none; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+  .badge-success { background: #dcfce7; color: #16a34a; }
+  .badge-danger { background: #fee2e2; color: #dc2626; }
+  .badge-warning { background: #fef9c3; color: #ca8a04; }
+  .badge-info { background: #dbeafe; color: #2563eb; }
+  .link { color: var(--primary); text-decoration: none; }
+  .link:hover { text-decoration: underline; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius); font-size: 0.875rem; font-weight: 500; border: none; cursor: pointer; text-decoration: none; transition: all 0.2s; }
+  .btn-outline { background: white; border: 1px solid var(--border); color: var(--text); }
+  .btn-outline:hover { background: #f8fafc; }
+  .btn-danger { background: var(--danger); color: white; }
+  .btn-danger:hover { background: #b91c1c; }
+  dialog { border: none; border-radius: var(--radius); box-shadow: 0 10px 40px rgba(0,0,0,0.2); padding: 0; max-width: 440px; width: 90%; }
+  dialog::backdrop { background: rgba(0,0,0,0.4); }
+  .modal-content { padding: 28px; }
+  .modal-content h3 { margin: 0 0 12px; font-size: 1.1rem; }
+  .modal-content p { margin: 0 0 20px; font-size: 0.875rem; color: var(--text-muted); }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 12px; }
+</style>

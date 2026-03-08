@@ -30,6 +30,8 @@ if (Astro.request.method === 'POST') {
         almacenNombre = almacen?.nombre ?? '';
       }
 
+      const fechaVencimiento = formData.get('fechaVencimiento')?.toString() || undefined;
+
       await store.createFactura({
         clienteId,
         clienteNombre: cliente.nombre,
@@ -41,6 +43,7 @@ if (Astro.request.method === 'POST') {
         total,
         estado: 'pendiente',
         fecha: new Date().toISOString().split('T')[0],
+        fechaVencimiento,
       });
 
       return Astro.redirect('/facturas');
@@ -73,7 +76,7 @@ const servicios = allServicios.filter(s => s.activo);
 
     <div class="card" style="margin-bottom:16px">
       <h2 style="font-size:1.1rem;margin-bottom:16px">Datos de la Factura</h2>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:16px">
         <div class="form-group">
           <label>Cliente</label>
           <select name="clienteId" class="form-control" required>
@@ -95,6 +98,11 @@ const servicios = allServicios.filter(s => s.activo);
         <div class="form-group">
           <label>Fecha</label>
           <input type="date" class="form-control" value={new Date().toISOString().split('T')[0]} disabled />
+        </div>
+        <div class="form-group">
+          <label>Fecha de Vencimiento</label>
+          <input type="date" name="fechaVencimiento" class="form-control" placeholder="Opcional" />
+          <small style="color:var(--text-muted);font-size:0.78rem">Para seguimiento de cuentas por cobrar</small>
         </div>
       </div>
     </div>

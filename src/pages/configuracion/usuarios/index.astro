@@ -1,6 +1,7 @@
 ---
 import AdminLayout from '../../../layouts/AdminLayout.astro';
 import { store } from '../../../lib/store';
+import bcrypt from 'bcryptjs';
 
 let mensaje = '';
 let tipoMensaje = '';
@@ -23,7 +24,7 @@ if (Astro.request.method === 'POST') {
         mensaje = 'Ya existe un usuario con ese email.';
         tipoMensaje = 'error';
       } else {
-        await store.createUsuario(data);
+        await store.createUsuario({ ...data, password: await bcrypt.hash(data.password, 10) });
         mensaje = 'Usuario creado exitosamente.';
         tipoMensaje = 'success';
       }
@@ -36,7 +37,7 @@ if (Astro.request.method === 'POST') {
         activo: data.activo,
       };
       if (data.password) {
-        updateData.password = data.password;
+        updateData.password = await bcrypt.hash(data.password, 10);
       }
       await store.updateUsuario(id, updateData);
       mensaje = 'Usuario actualizado.';

@@ -1,9 +1,10 @@
 import 'dotenv/config';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
+import bcrypt from 'bcryptjs';
 import { permisos, roles, usuarios, clientes, productos, facturas, empresa } from './schema';
 
-const connectionString = process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/admin_portal';
+const connectionString = process.env.DATABASE_URL!;
 const client = postgres(connectionString);
 const db = drizzle(client);
 
@@ -67,8 +68,8 @@ async function seed() {
 
   // --- Usuarios ---
   const usuariosData = [
-    { nombre: 'Admin', email: 'admin@portal.com', password: 'admin123', rol: 'Administrador', activo: true },
-    { nombre: 'Carlos Vendedor', email: 'carlos@portal.com', password: '123456', rol: 'Vendedor', activo: true },
+    { nombre: 'Admin', email: 'admin@portal.com', password: await bcrypt.hash('admin123', 10), rol: 'Administrador', activo: true },
+    { nombre: 'Carlos Vendedor', email: 'carlos@portal.com', password: await bcrypt.hash('123456', 10), rol: 'Vendedor', activo: true },
   ];
   await db.insert(usuarios).values(usuariosData);
   console.log(`  ✓ ${usuariosData.length} usuarios`);

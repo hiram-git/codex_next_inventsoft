@@ -6,6 +6,6 @@ export default defineConfig({
   out: './drizzle',
   dialect: 'postgresql',
   dbCredentials: {
-    url: process.env.DATABASE_URL ?? 'postgresql://loreto:hiram@localhost:5432/admin_portal',
+    url: process.env.DATABASE_URL!,
   },
 });

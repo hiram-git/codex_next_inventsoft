@@ -15,6 +15,8 @@ export type InventarioRow = typeof schema.inventario.$inferSelect;
 export type KardexRow = typeof schema.kardex.$inferSelect;
 export type Compra = typeof schema.compras.$inferSelect;
 export type Pedido = typeof schema.pedidos.$inferSelect;
+export type Servicio = typeof schema.servicios.$inferSelect;
+export type NotaCredito = typeof schema.notasCredito.$inferSelect;
 
 // Helper: numeric columns come back as strings from pg, convert to number
 function num(v: string | number | null): number {
@@ -43,6 +45,29 @@ function normalizeProducto(row: Producto) {
     ...row,
     id: String(row.id),
     precio: num(row.precio),
+  };
+}
+
+function normalizeServicio(row: Servicio) {
+  return { ...row, id: String(row.id), precio: num(row.precio) };
+}
+
+function normalizeNotaCredito(row: NotaCredito) {
+  return {
+    ...row,
+    id: String(row.id),
+    facturaId: String(row.facturaId),
+    clienteId: String(row.clienteId),
+    almacenId: row.almacenId ? String(row.almacenId) : null,
+    subtotal: num(row.subtotal),
+    iva: num(row.iva),
+    total: num(row.total),
+    items: (row.items ?? []).map(i => ({
+      ...i,
+      tipo: i.tipo ?? 'producto' as const,
+      precioUnitario: num(i.precioUnitario),
+      subtotal: num(i.subtotal),
+    })),
   };
 }
 
@@ -211,9 +236,10 @@ export const store = {
     }).returning();
     const factura = normalizeFactura(rows[0]);
 
-    // If almacenId provided, create inventory exits (salidas)
+    // If almacenId provided, create inventory exits only for tipo='producto' items
     if (data.almacenId && data.almacenNombre) {
       for (const item of data.items) {
+        if ((item.tipo ?? 'producto') !== 'producto') continue;
         const existing = await this.getInventarioItem(data.almacenId, item.productoId);
         const stockAnterior = existing?.stock ?? 0;
         const stockNuevo = Math.max(0, stockAnterior - item.cantidad);
@@ -646,6 +672,108 @@ export const store = {
 
     const rows = await db.update(schema.pedidos).set({ estado: 'cancelado' }).where(eq(schema.pedidos.id, Number(id))).returning();
     return rows[0] ? normalizePedido(rows[0]) : null;
+  },
+
+  // --- Servicios ---
+  async getServicios() {
+    const rows = await db.select().from(schema.servicios);
+    return rows.map(normalizeServicio);
+  },
+
+  async getServicio(id: string) {
+    const rows = await db.select().from(schema.servicios).where(eq(schema.servicios.id, Number(id)));
+    return rows[0] ? normalizeServicio(rows[0]) : undefined;
+  },
+
+  async createServicio(data: { nombre: string; descripcion: string; precio: number; categoria: string; activo: boolean }) {
+    const rows = await db.insert(schema.servicios).values({ ...data, precio: String(data.precio) }).returning();
+    return normalizeServicio(rows[0]);
+  },
+
+  async updateServicio(id: string, data: Record<string, unknown>) {
+    const values = { ...data };
+    if (typeof values.precio === 'number') values.precio = String(values.precio);
+    const rows = await db.update(schema.servicios).set(values).where(eq(schema.servicios.id, Number(id))).returning();
+    return rows[0] ? normalizeServicio(rows[0]) : null;
+  },
+
+  async deleteServicio(id: string) {
+    const rows = await db.delete(schema.servicios).where(eq(schema.servicios.id, Number(id))).returning();
+    return rows.length > 0;
+  },
+
+  // --- Notas de Crédito ---
+  async getNotasCredito() {
+    const rows = await db.select().from(schema.notasCredito).orderBy(desc(schema.notasCredito.id));
+    return rows.map(normalizeNotaCredito);
+  },
+
+  async getNotaCredito(id: string) {
+    const rows = await db.select().from(schema.notasCredito).where(eq(schema.notasCredito.id, Number(id)));
+    return rows[0] ? normalizeNotaCredito(rows[0]) : undefined;
+  },
+
+  async getNotaCreditoByFactura(facturaId: string) {
+    const rows = await db.select().from(schema.notasCredito).where(eq(schema.notasCredito.facturaId, Number(facturaId)));
+    return rows[0] ? normalizeNotaCredito(rows[0]) : undefined;
+  },
+
+  async createNotaCredito(facturaId: string, motivo: string) {
+    const factura = await this.getFactura(facturaId);
+    if (!factura || factura.estado === 'cancelada') return null;
+
+    const countResult = await db.select({ count: sql<number>`count(*)` }).from(schema.notasCredito);
+    const count = Number(countResult[0].count);
+    const numero = `NC-${String(count + 1).padStart(3, '0')}`;
+    const fecha = new Date().toISOString().split('T')[0];
+
+    const rows = await db.insert(schema.notasCredito).values({
+      numero,
+      facturaId: Number(facturaId),
+      facturaNumero: factura.numero,
+      clienteId: Number(factura.clienteId),
+      clienteNombre: factura.clienteNombre,
+      almacenId: factura.almacenId ? Number(factura.almacenId) : null,
+      almacenNombre: factura.almacenNombre ?? '',
+      items: factura.items as typeof schema.notasCredito.$inferInsert['items'],
+      subtotal: String(factura.subtotal),
+      iva: String(factura.iva),
+      total: String(factura.total),
+      motivo,
+      fecha,
+    }).returning();
+    const nota = normalizeNotaCredito(rows[0]);
+
+    // Cancel the factura
+    await db.update(schema.facturas).set({ estado: 'cancelada' }).where(eq(schema.facturas.id, Number(facturaId)));
+
+    // Return inventory for tipo='producto' items that had a warehouse
+    if (factura.almacenId && factura.almacenNombre) {
+      for (const item of factura.items) {
+        if ((item.tipo ?? 'producto') !== 'producto') continue;
+        const existing = await this.getInventarioItem(factura.almacenId, item.productoId);
+        const stockAnterior = existing?.stock ?? 0;
+        const stockNuevo = stockAnterior + item.cantidad;
+        await this._adjustStock(factura.almacenId, factura.almacenNombre, item.productoId, item.productoNombre, item.cantidad, 0);
+        await this._createMovimientoKardex({
+          almacenId: factura.almacenId,
+          almacenNombre: factura.almacenNombre,
+          productoId: item.productoId,
+          productoNombre: item.productoNombre,
+          tipo: 'entrada',
+          cantidad: item.cantidad,
+          stockAnterior,
+          stockNuevo,
+          referencia: 'ajuste',
+          referenciaId: Number(nota.id),
+          referenciaNumero: nota.numero,
+          notas: `Devolución por nota de crédito ${nota.numero}`,
+          fecha,
+        });
+      }
+    }
+
+    return nota;
   },
 
   async despacharPedido(id: string) {

@@ -18,7 +18,7 @@ if (Astro.request.method === 'POST') {
     try { items = JSON.parse(itemsJson); } catch { items = []; }
 
     if (items.length === 0) {
-      error = 'Agregue al menos un producto a la factura.';
+      error = 'Agregue al menos un producto o servicio a la factura.';
     } else {
       const subtotal = items.reduce((sum: number, item: { subtotal: number }) => sum + item.subtotal, 0);
       const iva = subtotal * 0.16;
@@ -48,12 +48,14 @@ if (Astro.request.method === 'POST') {
   }
 }
 
-const [clientes, almacenes, allProductos] = await Promise.all([
+const [clientes, almacenes, allProductos, allServicios] = await Promise.all([
   store.getClientes(),
   store.getAlmacenes(),
   store.getProductos(),
+  store.getServicios(),
 ]);
 const productos = allProductos.filter(p => p.activo);
+const servicios = allServicios.filter(s => s.activo);
 ---
 
 <AdminLayout title="Nueva Factura">
@@ -82,7 +84,7 @@ const productos = allProductos.filter(p => p.activo);
           </select>
         </div>
         <div class="form-group">
-          <label>Almacén (salida de inventario)</label>
+          <label>Almacén (salida de inventario de productos)</label>
           <select name="almacenId" class="form-control">
             <option value="">Sin afectar inventario</option>
             {almacenes.filter(a => a.activo).map(a => (
@@ -98,18 +100,43 @@ const productos = allProductos.filter(p => p.activo);
     </div>
 
     <div class="card" style="margin-bottom:16px">
-      <h2 style="font-size:1.1rem;margin-bottom:16px">Productos</h2>
+      <h2 style="font-size:1.1rem;margin-bottom:16px">Productos y Servicios</h2>
 
       <div style="display:grid;grid-template-columns:2fr 1fr auto;gap:8px;margin-bottom:16px;align-items:end">
         <div class="form-group" style="margin-bottom:0">
-          <label>Producto</label>
-          <select id="selProducto" class="form-control">
+          <label>Producto / Servicio</label>
+          <select id="selItem" class="form-control">
             <option value="">Seleccionar...</option>
-            {productos.map(p => (
-              <option value={p.id} data-nombre={p.nombre} data-precio={p.precio} data-stock={p.stock}>
-                {p.nombre} - ${p.precio.toLocaleString('es-MX', { minimumFractionDigits: 2 })} (Stock: {p.stock})
-              </option>
-            ))}
+            {productos.length > 0 && (
+              <optgroup label="📦 Productos (afectan inventario)">
+                {productos.map(p => (
+                  <option
+                    value={`producto:${p.id}`}
+                    data-tipo="producto"
+                    data-nombre={p.nombre}
+                    data-precio={p.precio}
+                    data-stock={p.stock}
+                  >
+                    {p.nombre} — ${p.precio.toLocaleString('es-MX', { minimumFractionDigits: 2 })} (Stock: {p.stock})
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {servicios.length > 0 && (
+              <optgroup label="🔧 Servicios (no afectan inventario)">
+                {servicios.map(s => (
+                  <option
+                    value={`servicio:${s.id}`}
+                    data-tipo="servicio"
+                    data-nombre={s.nombre}
+                    data-precio={s.precio}
+                    data-stock="999999"
+                  >
+                    {s.nombre} — ${s.precio.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </div>
         <div class="form-group" style="margin-bottom:0">
@@ -121,10 +148,11 @@ const productos = allProductos.filter(p => p.activo);
         </button>
       </div>
 
-      <table id="itemsTable">
+      <table>
         <thead>
           <tr>
-            <th>Producto</th>
+            <th>Descripción</th>
+            <th>Tipo</th>
             <th>P. Unitario</th>
             <th>Cantidad</th>
             <th>Subtotal</th>
@@ -132,8 +160,8 @@ const productos = allProductos.filter(p => p.activo);
           </tr>
         </thead>
         <tbody id="itemsBody">
-          <tr id="emptyRow">
-            <td colspan="5" style="text-align:center;color:var(--text-muted)">No se han agregado productos.</td>
+          <tr>
+            <td colspan="6" style="text-align:center;color:var(--text-muted)">No se han agregado items.</td>
           </tr>
         </tbody>
       </table>
@@ -166,61 +194,39 @@ const productos = allProductos.filter(p => p.activo);
 </AdminLayout>
 
 <style>
-  .totals {
-    max-width: 300px;
-    margin-left: auto;
-  }
-
-  .total-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 8px 0;
-    font-size: 0.95rem;
-  }
-
-  .total-row + .total-row {
-    border-top: 1px solid var(--border);
-  }
-
-  .total-final {
-    font-size: 1.15rem;
-    font-weight: 700;
-    color: var(--primary);
-  }
+  .totals { max-width: 300px; margin-left: auto; }
+  .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 0.95rem; }
+  .total-row + .total-row { border-top: 1px solid var(--border); }
+  .total-final { font-size: 1.15rem; font-weight: 700; color: var(--primary); }
 </style>
 
 <script is:inline>
   let items = [];
 
   function addItem() {
-    const sel = document.getElementById('selProducto');
+    const sel = document.getElementById('selItem');
     const cantInput = document.getElementById('cantidad');
     const opt = sel.options[sel.selectedIndex];
 
-    if (!sel.value) return alert('Seleccione un producto.');
+    if (!sel.value) return alert('Seleccione un producto o servicio.');
 
-    const productoId = sel.value;
+    const [tipo, itemId] = sel.value.split(':');
     const productoNombre = opt.dataset.nombre;
     const precioUnitario = parseFloat(opt.dataset.precio);
     const stock = parseInt(opt.dataset.stock);
     const cantidad = parseInt(cantInput.value) || 1;
 
     if (cantidad <= 0) return alert('La cantidad debe ser mayor a 0.');
-    if (cantidad > stock) return alert(`Stock insuficiente. Disponible: ${stock}`);
+    if (tipo === 'producto' && cantidad > stock) {
+      return alert(`Stock insuficiente. Disponible: ${stock}`);
+    }
 
-    // Check if already added
-    const existing = items.find(i => i.productoId === productoId);
+    const existing = items.find(i => i.tipo === tipo && i.productoId === itemId);
     if (existing) {
       existing.cantidad += cantidad;
       existing.subtotal = existing.cantidad * existing.precioUnitario;
     } else {
-      items.push({
-        productoId,
-        productoNombre,
-        cantidad,
-        precioUnitario,
-        subtotal: cantidad * precioUnitario,
-      });
+      items.push({ tipo, productoId: itemId, productoNombre, cantidad, precioUnitario, subtotal: cantidad * precioUnitario });
     }
 
     sel.value = '';
@@ -238,11 +244,17 @@ const productos = allProductos.filter(p => p.activo);
     const fmt = (n) => '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 2 });
 
     if (items.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted)">No se han agregado productos.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">No se han agregado items.</td></tr>';
     } else {
       tbody.innerHTML = items.map((item, i) => `
         <tr>
           <td>${item.productoNombre}</td>
+          <td>
+            ${item.tipo === 'servicio'
+              ? '<span style="background:var(--bg);color:var(--text-muted);padding:2px 8px;border-radius:12px;font-size:0.75rem;font-weight:600">Servicio</span>'
+              : '<span style="background:#dcfce7;color:#16a34a;padding:2px 8px;border-radius:12px;font-size:0.75rem;font-weight:600">Producto</span>'
+            }
+          </td>
           <td>${fmt(item.precioUnitario)}</td>
           <td>${item.cantidad}</td>
           <td><strong>${fmt(item.subtotal)}</strong></td>

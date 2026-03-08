@@ -3,48 +3,102 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 import { store } from '../../lib/store';
 
 const { id } = Astro.params;
-const factura = await store.getFactura(id ?? '');
+let mensaje = '';
+let tipoMensaje = '';
 
-if (!factura) {
-  return Astro.redirect('/facturas');
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const action = formData.get('_action')?.toString();
+
+  if (action === 'nota_credito') {
+    const motivo = formData.get('motivo')?.toString() ?? '';
+    const nota = await store.createNotaCredito(id ?? '', motivo);
+    if (nota) {
+      return Astro.redirect(`/notas-credito/${nota.id}`);
+    } else {
+      mensaje = 'No se pudo generar la nota de crédito. La factura ya puede estar cancelada.';
+      tipoMensaje = 'error';
+    }
+  }
 }
+
+const factura = await store.getFactura(id ?? '');
+if (!factura) return Astro.redirect('/facturas');
+
+const notaCredito = await store.getNotaCreditoByFactura(id ?? '');
 ---
 
 <AdminLayout title={`Factura ${factura.numero}`}>
   <div class="page-header">
-    <h1>Factura {factura.numero}</h1>
-    <a href="/facturas" class="btn btn-secondary">
-      <span class="material-icons-round">arrow_back</span> Volver
-    </a>
+    <div style="display:flex;align-items:center;gap:12px">
+      <h1>Factura {factura.numero}</h1>
+      <span class:list={['badge', {
+        'badge-success': factura.estado === 'pagada',
+        'badge-warning': factura.estado === 'pendiente',
+        'badge-danger': factura.estado === 'cancelada',
+      }]}>{factura.estado}</span>
+    </div>
+    <div style="display:flex;gap:8px">
+      {factura.estado !== 'cancelada' && !notaCredito && (
+        <button class="btn btn-danger" onclick="document.getElementById('modalNC').style.display='flex'">
+          <span class="material-icons-round" style="font-size:18px">undo</span> Nota de Crédito
+        </button>
+      )}
+      {notaCredito && (
+        <a href={`/notas-credito/${notaCredito.id}`} class="btn btn-secondary">
+          <span class="material-icons-round" style="font-size:18px">description</span> Ver NC {notaCredito.numero}
+        </a>
+      )}
+      <a href="/facturas" class="btn btn-secondary">
+        <span class="material-icons-round">arrow_back</span> Volver
+      </a>
+    </div>
   </div>
+
+  {mensaje && <div class={`alert alert-${tipoMensaje}`}>{mensaje}</div>}
+
+  {factura.estado === 'cancelada' && notaCredito && (
+    <div class="alert" style="background:#fef2f2;color:var(--danger);border:1px solid #fca5a5;margin-bottom:16px;font-size:0.875rem">
+      <span class="material-icons-round" style="font-size:16px;vertical-align:middle">info</span>
+      Esta factura fue anulada mediante la nota de crédito
+      <a href={`/notas-credito/${notaCredito.id}`} style="color:var(--danger);font-weight:600;margin-left:4px">{notaCredito.numero}</a>.
+    </div>
+  )}
 
   <div class="card" style="margin-bottom:16px">
     <div class="factura-info">
       <div>
-        <h3 style="color:var(--text-muted);font-size:0.8rem;text-transform:uppercase">Cliente</h3>
+        <h3 class="info-label">Cliente</h3>
         <p style="font-weight:600">{factura.clienteNombre}</p>
       </div>
       <div>
-        <h3 style="color:var(--text-muted);font-size:0.8rem;text-transform:uppercase">Fecha</h3>
+        <h3 class="info-label">Fecha</h3>
         <p style="font-weight:600">{factura.fecha}</p>
       </div>
       <div>
-        <h3 style="color:var(--text-muted);font-size:0.8rem;text-transform:uppercase">Estado</h3>
+        <h3 class="info-label">Estado</h3>
         <span class:list={['badge', {
           'badge-success': factura.estado === 'pagada',
           'badge-warning': factura.estado === 'pendiente',
           'badge-danger': factura.estado === 'cancelada',
         }]}>{factura.estado}</span>
       </div>
+      {factura.almacenNombre && (
+        <div>
+          <h3 class="info-label">Almacén</h3>
+          <p style="font-weight:600">{factura.almacenNombre}</p>
+        </div>
+      )}
     </div>
   </div>
 
   <div class="card" style="margin-bottom:16px">
-    <h2 style="font-size:1.1rem;margin-bottom:16px">Detalle de Productos</h2>
+    <h2 style="font-size:1.1rem;margin-bottom:16px">Detalle</h2>
     <table>
       <thead>
         <tr>
-          <th>Producto</th>
+          <th>Descripción</th>
+          <th>Tipo</th>
           <th>P. Unitario</th>
           <th>Cantidad</th>
           <th>Subtotal</th>
@@ -54,6 +108,12 @@ if (!factura) {
         {factura.items.map(item => (
           <tr>
             <td>{item.productoNombre}</td>
+            <td>
+              {item.tipo === 'servicio'
+                ? <span class="badge badge-secondary">Servicio</span>
+                : <span class="badge badge-success">Producto</span>
+              }
+            </td>
             <td>${item.precioUnitario.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
             <td>{item.cantidad}</td>
             <td><strong>${item.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</strong></td>
@@ -79,34 +139,40 @@ if (!factura) {
       </div>
     </div>
   </div>
+
+  <!-- Modal Nota de Crédito -->
+  <div class="modal-overlay" id="modalNC" style="display:none">
+    <div class="modal">
+      <h2 style="color:var(--danger)">Generar Nota de Crédito</h2>
+      <p style="font-size:0.9rem;color:var(--text-muted);margin-bottom:16px">
+        Se anulará la factura <strong>{factura.numero}</strong> y
+        {factura.almacenNombre
+          ? ` se devolverán los productos al almacén "${factura.almacenNombre}".`
+          : ' no se afectará el inventario.'}
+      </p>
+      <form method="POST">
+        <input type="hidden" name="_action" value="nota_credito" />
+        <div class="form-group">
+          <label>Motivo de la anulación</label>
+          <textarea name="motivo" class="form-control" rows="3" required
+            placeholder="Ej: Producto defectuoso, error en la facturación, devolución del cliente..."></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalNC').style.display='none'">Cancelar</button>
+          <button type="submit" class="btn btn-danger">Generar Nota de Crédito</button>
+        </div>
+      </form>
+    </div>
+  </div>
 </AdminLayout>
 
 <style>
-  .factura-info {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 24px;
-  }
-
-  .totals {
-    max-width: 300px;
-    margin-left: auto;
-  }
-
-  .total-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 8px 0;
-    font-size: 0.95rem;
-  }
-
-  .total-row + .total-row {
-    border-top: 1px solid var(--border);
-  }
-
-  .total-final {
-    font-size: 1.15rem;
-    font-weight: 700;
-    color: var(--primary);
-  }
+  .factura-info { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+  .info-label { font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; margin-bottom: 4px; }
+  .totals { max-width: 300px; margin-left: auto; }
+  .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 0.95rem; }
+  .total-row + .total-row { border-top: 1px solid var(--border); }
+  .total-final { font-size: 1.15rem; font-weight: 700; color: var(--primary); }
+  .badge-secondary { background: var(--bg); color: var(--text-muted); }
+  @media (max-width: 768px) { .factura-info { grid-template-columns: 1fr 1fr; } }
 </style>

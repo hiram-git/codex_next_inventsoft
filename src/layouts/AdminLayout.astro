@@ -32,6 +32,10 @@ const inventarioItems = [
   { href: '/kardex', label: 'Kardex', icon: 'swap_vert' },
 ];
 
+const reportesItems = [
+  { href: '/reportes/ventas', label: 'Ventas Mensuales', icon: 'bar_chart' },
+];
+
 const configItems = [
   { href: '/configuracion/empresa', label: 'Empresa', icon: 'business' },
   { href: '/configuracion/usuarios', label: 'Usuarios', icon: 'manage_accounts' },
@@ -83,6 +87,16 @@ const configItems = [
       <div class="nav-section">
         <span class="nav-section-title">Control de Inventario</span>
         {inventarioItems.map(item => (
+          <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]}>
+            <span class="material-icons-round">{item.icon}</span>
+            {item.label}
+          </a>
+        ))}
+      </div>
+
+      <div class="nav-section">
+        <span class="nav-section-title">Reportes</span>
+        {reportesItems.map(item => (
           <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]}>
             <span class="material-icons-round">{item.icon}</span>
             {item.label}

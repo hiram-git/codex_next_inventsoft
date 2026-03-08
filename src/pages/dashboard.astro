@@ -27,6 +27,8 @@ const quickActions = [
   { href: '/cuentas-por-cobrar', icon: 'account_balance_wallet', label: 'Cuentas por Cobrar', color: '#dc2626', bg: '#fee2e2' },
   { href: '/inventario', icon: 'view_list', label: 'Ver Inventario', color: '#059669', bg: '#d1fae5' },
   { href: '/kardex', icon: 'swap_vert', label: 'Kardex', color: '#6366f1', bg: '#e0e7ff' },
+  { href: '/reportes/ventas', icon: 'bar_chart', label: 'Reporte Ventas', color: '#0f766e', bg: '#ccfbf1' },
+  { href: '/cotizaciones/nueva', icon: 'request_quote', label: 'Nueva Cotización', color: '#be185d', bg: '#fce7f3' },
 ];
 ---
 
@@ -192,7 +194,7 @@ const quickActions = [
   /* Quick Actions */
   .quick-actions {
     display: grid;
-    grid-template-columns: repeat(8, 1fr);
+    grid-template-columns: repeat(10, 1fr);
     gap: 10px;
     margin-bottom: 20px;
   }
@@ -361,18 +363,12 @@ const quickActions = [
   .badge-warning { background: #fef9c3; color: #ca8a04; }
   .badge-danger { background: #fee2e2; color: #dc2626; }
 
-  @media (max-width: 1200px) {
-    .quick-actions { grid-template-columns: repeat(4, 1fr); }
-    .stats-grid { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 1300px) {
+    .quick-actions { grid-template-columns: repeat(5, 1fr); }
   }
-
   @media (max-width: 900px) {
     .quick-actions { grid-template-columns: repeat(4, 1fr); }
     .stats-grid { grid-template-columns: repeat(2, 1fr); }
     .dashboard-grid { grid-template-columns: 1fr; }
-  }
-
-  @media (max-width: 600px) {
-    .quick-actions { grid-template-columns: repeat(4, 1fr); }
   }
 </style>

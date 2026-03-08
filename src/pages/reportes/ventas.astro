@@ -1,0 +1,404 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { store } from '../../lib/store';
+
+const url = new URL(Astro.request.url);
+const now = new Date();
+const mes  = parseInt(url.searchParams.get('mes')  ?? String(now.getMonth() + 1));
+const año  = parseInt(url.searchParams.get('año')  ?? String(now.getFullYear()));
+
+const [reporte, resumenMensual] = await Promise.all([
+  store.getReporteVentas(mes, año),
+  store.getResumenMensual(6),
+]);
+
+const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const mesLabel = meses[mes - 1];
+
+// Navigation helpers
+const prevDate = new Date(año, mes - 2, 1);
+const nextDate = new Date(año, mes, 1);
+const nextDisabled = nextDate > now;
+
+const metodoPagoLabel: Record<string, string> = {
+  efectivo: 'Efectivo', transferencia: 'Transferencia', cheque: 'Cheque', tarjeta: 'Tarjeta',
+};
+
+// Max value for bar chart normalization
+const maxFacturado = Math.max(...resumenMensual.map(m => m.facturado), 1);
+---
+
+<AdminLayout title={`Reporte de Ventas — ${mesLabel} ${año}`}>
+  <div class="page-header">
+    <div>
+      <h1>Reporte de Ventas</h1>
+      <p class="subtitle">{mesLabel} {año}</p>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <a href={`/reportes/ventas?mes=${prevDate.getMonth()+1}&año=${prevDate.getFullYear()}`} class="btn btn-outline btn-icon" title="Mes anterior">
+        <span class="material-icons-round">chevron_left</span>
+      </a>
+      <form method="GET" style="display:flex;gap:8px;align-items:center">
+        <select name="mes" class="select-sm" onchange="this.form.submit()">
+          {meses.map((m, i) => (
+            <option value={i+1} selected={i+1 === mes}>{m}</option>
+          ))}
+        </select>
+        <select name="año" class="select-sm" onchange="this.form.submit()">
+          {[now.getFullYear()-2, now.getFullYear()-1, now.getFullYear()].map(y => (
+            <option value={y} selected={y === año}>{y}</option>
+          ))}
+        </select>
+      </form>
+      <a
+        href={nextDisabled ? '#' : `/reportes/ventas?mes=${nextDate.getMonth()+1}&año=${nextDate.getFullYear()}`}
+        class:list={['btn btn-outline btn-icon', { disabled: nextDisabled }]}
+        title="Mes siguiente"
+      >
+        <span class="material-icons-round">chevron_right</span>
+      </a>
+      <a href={`/reportes/ventas?mes=${mes}&año=${año}`} onclick="window.print();return false" class="btn btn-outline">
+        <span class="material-icons-round" style="font-size:18px">print</span> Imprimir
+      </a>
+    </div>
+  </div>
+
+  <!-- Summary cards -->
+  <div class="summary-grid">
+    <div class="summary-card blue">
+      <span class="material-icons-round">receipt</span>
+      <div>
+        <div class="sc-label">Total Facturado</div>
+        <div class="sc-value">${reporte.totalFacturado.toLocaleString('es-MX', {minimumFractionDigits:2})}</div>
+        <div class="sc-sub">{reporte.facturas.filter(f=>f.estado!=='cancelada').length} facturas activas</div>
+      </div>
+    </div>
+    <div class="summary-card green">
+      <span class="material-icons-round">payments</span>
+      <div>
+        <div class="sc-label">Total Cobrado</div>
+        <div class="sc-value">${reporte.totalCobrado.toLocaleString('es-MX', {minimumFractionDigits:2})}</div>
+        <div class="sc-sub">{reporte.cobros.length} cobro{reporte.cobros.length!==1?'s':''} recibido{reporte.cobros.length!==1?'s':''}</div>
+      </div>
+    </div>
+    <div class="summary-card red">
+      <span class="material-icons-round">account_balance_wallet</span>
+      <div>
+        <div class="sc-label">Saldo Pendiente</div>
+        <div class="sc-value">${reporte.saldoPendiente.toLocaleString('es-MX', {minimumFractionDigits:2})}</div>
+        <div class="sc-sub">{reporte.facturas.filter(f=>f.estado==='vencida').length} factura{reporte.facturas.filter(f=>f.estado==='vencida').length!==1?'s':''} vencida{reporte.facturas.filter(f=>f.estado==='vencida').length!==1?'s':''}</div>
+      </div>
+    </div>
+    <div class="summary-card purple">
+      <span class="material-icons-round">groups</span>
+      <div>
+        <div class="sc-label">Clientes Facturados</div>
+        <div class="sc-value">{reporte.topClientes.length}</div>
+        <div class="sc-sub">clientes únicos</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chart: últimos 6 meses -->
+  <div class="card" style="margin-bottom:16px">
+    <h2>Comparativa — Últimos 6 meses</h2>
+    <div class="bar-chart">
+      {resumenMensual.map(m => {
+        const fPct = Math.round((m.facturado / maxFacturado) * 100);
+        const cPct = Math.round((m.cobrado   / maxFacturado) * 100);
+        const isActual = m.mes === mes && m.año === año;
+        return (
+          <div class:list={['bar-col', { 'bar-col--active': isActual }]}>
+            <div class="bar-values">
+              <span class="bar-val-f">${(m.facturado/1000).toFixed(1)}k</span>
+            </div>
+            <div class="bar-tracks">
+              <div class="bar-track">
+                <div class="bar-fill bar-fill--f" style={`height:${fPct}%`}></div>
+              </div>
+              <div class="bar-track">
+                <div class="bar-fill bar-fill--c" style={`height:${cPct}%`}></div>
+              </div>
+            </div>
+            <div class="bar-label">{m.label}</div>
+          </div>
+        );
+      })}
+    </div>
+    <div class="chart-legend">
+      <span class="legend-dot dot-f"></span> Facturado &nbsp;
+      <span class="legend-dot dot-c"></span> Cobrado
+    </div>
+  </div>
+
+  <div class="two-col">
+    <!-- Estado de facturas -->
+    <div class="card">
+      <h2>Estado de Facturas</h2>
+      {reporte.facturas.length === 0
+        ? <p class="empty">Sin facturas en este período</p>
+        : (
+          <div class="estado-list">
+            {(['pagada','pendiente','parcial','vencida','cancelada'] as const).map(e => {
+              const n = reporte.porEstado[e] ?? 0;
+              if (n === 0) return null;
+              const total = reporte.facturas.length;
+              const pct = Math.round((n / total) * 100);
+              return (
+                <div class="estado-row">
+                  <div class="estado-meta">
+                    <span class:list={['badge', `badge-${e}`]}>{e.charAt(0).toUpperCase()+e.slice(1)}</span>
+                    <span class="estado-count">{n} factura{n!==1?'s':''}</span>
+                  </div>
+                  <div class="progress-bar">
+                    <div class:list={['progress-fill', `fill-${e}`]} style={`width:${pct}%`}></div>
+                  </div>
+                  <span class="estado-pct">{pct}%</span>
+                </div>
+              );
+            })}
+          </div>
+        )
+      }
+
+      {Object.keys(reporte.porMetodo).length > 0 && (
+        <>
+          <h2 style="margin-top:24px">Cobros por Método de Pago</h2>
+          <div class="metodo-list">
+            {Object.entries(reporte.porMetodo).map(([m, total]) => (
+              <div class="metodo-row">
+                <span class="metodo-label">{metodoPagoLabel[m] ?? m}</span>
+                <span class="metodo-total">${(total as number).toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+
+    <!-- Top clientes -->
+    <div class="card">
+      <h2>Top Clientes</h2>
+      {reporte.topClientes.length === 0
+        ? <p class="empty">Sin datos</p>
+        : (
+          <div class="ranking-list">
+            {reporte.topClientes.map((c, i) => (
+              <div class="ranking-row">
+                <div class="ranking-pos">{i+1}</div>
+                <div class="ranking-avatar">{c.nombre.charAt(0).toUpperCase()}</div>
+                <div class="ranking-info">
+                  <span class="ranking-name">{c.nombre}</span>
+                  <span class="ranking-sub">{c.count} factura{c.count!==1?'s':''}</span>
+                </div>
+                <div class="ranking-value">${c.total.toFixed(2)}</div>
+              </div>
+            ))}
+          </div>
+        )
+      }
+    </div>
+  </div>
+
+  <!-- Top productos/servicios -->
+  <div class="card" style="margin-top:16px;margin-bottom:16px">
+    <h2>Top Productos y Servicios Vendidos</h2>
+    {reporte.topProductos.length === 0
+      ? <p class="empty">Sin items en facturas de este período</p>
+      : (
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Descripción</th>
+              <th>Tipo</th>
+              <th style="text-align:right">Cantidad</th>
+              <th style="text-align:right">Total vendido</th>
+            </tr>
+          </thead>
+          <tbody>
+            {reporte.topProductos.map((p, i) => (
+              <tr>
+                <td class="rank-num">{i+1}</td>
+                <td>{p.nombre}</td>
+                <td>
+                  <span class:list={['badge', p.tipo==='servicio' ? 'badge-secondary' : 'badge-green']}>
+                    {p.tipo==='servicio' ? 'Servicio' : 'Producto'}
+                  </span>
+                </td>
+                <td style="text-align:right">{p.cantidad}</td>
+                <td style="text-align:right"><strong>${p.total.toFixed(2)}</strong></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )
+    }
+  </div>
+
+  <!-- Detalle de facturas del mes -->
+  <div class="card">
+    <h2>Facturas del Período</h2>
+    {reporte.facturas.length === 0
+      ? <p class="empty">No se emitieron facturas en este período</p>
+      : (
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Número</th>
+                <th>Fecha</th>
+                <th>Cliente</th>
+                <th>Estado</th>
+                <th style="text-align:right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reporte.facturas.sort((a,b) => b.numero.localeCompare(a.numero)).map(f => (
+                <tr>
+                  <td><a href={`/facturas/${f.id}`} class="link">{f.numero}</a></td>
+                  <td>{f.fecha}</td>
+                  <td>{f.clienteNombre}</td>
+                  <td>
+                    <span class:list={['badge', {
+                      'badge-pagada': f.estado==='pagada',
+                      'badge-pendiente': f.estado==='pendiente',
+                      'badge-parcial': f.estado==='parcial',
+                      'badge-vencida': f.estado==='vencida',
+                      'badge-cancelada': f.estado==='cancelada',
+                    }]}>{f.estado}</span>
+                  </td>
+                  <td style="text-align:right"><strong>${f.total.toFixed(2)}</strong></td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="4" style="text-align:right;font-weight:600;color:var(--text-muted);font-size:0.85rem">Total facturado (activas):</td>
+                <td style="text-align:right;font-weight:700;font-size:1rem">${reporte.totalFacturado.toFixed(2)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )
+    }
+  </div>
+</AdminLayout>
+
+<style>
+  /* Page header */
+  .page-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; gap:12px; }
+  h1 { font-size:1.5rem; font-weight:700; margin:0; }
+  h2 { font-size:1rem; font-weight:600; margin:0 0 16px; }
+  .subtitle { color:var(--text-muted); font-size:0.9rem; margin:2px 0 0; }
+
+  /* Month selector */
+  .select-sm { border:1px solid var(--border); border-radius:var(--radius); padding:6px 10px; font-size:0.875rem; background:white; cursor:pointer; }
+  .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:var(--radius); font-size:0.875rem; font-weight:500; border:1px solid transparent; cursor:pointer; text-decoration:none; transition:all 0.2s; }
+  .btn-outline { background:white; border-color:var(--border); color:var(--text); }
+  .btn-outline:hover { background:#f8fafc; }
+  .btn-icon { padding:6px; }
+  .disabled { opacity:0.4; pointer-events:none; }
+
+  /* Summary cards */
+  .summary-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:16px; }
+  .summary-card { background:white; border:1px solid var(--border); border-radius:var(--radius); padding:20px; display:flex; align-items:center; gap:16px; }
+  .summary-card .material-icons-round { font-size:32px; border-radius:12px; padding:8px; flex-shrink:0; }
+  .summary-card.blue .material-icons-round { background:#dbeafe; color:#2563eb; }
+  .summary-card.green .material-icons-round { background:#dcfce7; color:#16a34a; }
+  .summary-card.red .material-icons-round { background:#fee2e2; color:#dc2626; }
+  .summary-card.purple .material-icons-round { background:#f3e8ff; color:#7c3aed; }
+  .sc-label { font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted); margin-bottom:2px; }
+  .sc-value { font-size:1.3rem; font-weight:700; line-height:1.2; }
+  .sc-sub { font-size:0.72rem; color:var(--text-muted); margin-top:2px; }
+
+  /* Bar chart */
+  .card { background:white; border:1px solid var(--border); border-radius:var(--radius); padding:20px; }
+  .bar-chart { display:flex; align-items:flex-end; gap:16px; height:160px; padding:0 8px; margin-bottom:8px; }
+  .bar-col { display:flex; flex-direction:column; align-items:center; flex:1; gap:4px; height:100%; }
+  .bar-col--active .bar-label { font-weight:700; color:var(--primary); }
+  .bar-values { font-size:0.68rem; color:var(--text-muted); height:16px; display:flex; align-items:center; }
+  .bar-col--active .bar-values { color:var(--primary); font-weight:600; }
+  .bar-tracks { display:flex; gap:3px; align-items:flex-end; flex:1; width:100%; }
+  .bar-track { flex:1; background:#f1f5f9; border-radius:4px 4px 0 0; height:100%; display:flex; align-items:flex-end; overflow:hidden; }
+  .bar-fill { width:100%; border-radius:4px 4px 0 0; transition:height 0.4s; }
+  .bar-fill--f { background:#3b82f6; }
+  .bar-fill--c { background:#22c55e; }
+  .bar-col--active .bar-fill--f { background:#1d4ed8; }
+  .bar-col--active .bar-fill--c { background:#15803d; }
+  .bar-label { font-size:0.7rem; color:var(--text-muted); white-space:nowrap; }
+  .chart-legend { font-size:0.78rem; color:var(--text-muted); display:flex; align-items:center; gap:4px; }
+  .legend-dot { display:inline-block; width:10px; height:10px; border-radius:50%; }
+  .dot-f { background:#3b82f6; }
+  .dot-c { background:#22c55e; }
+
+  /* Two col layout */
+  .two-col { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+
+  /* Estado list */
+  .estado-list { display:flex; flex-direction:column; gap:12px; }
+  .estado-row { display:flex; align-items:center; gap:10px; }
+  .estado-meta { display:flex; align-items:center; gap:8px; width:160px; flex-shrink:0; }
+  .estado-count { font-size:0.78rem; color:var(--text-muted); }
+  .progress-bar { flex:1; height:8px; background:#f1f5f9; border-radius:4px; overflow:hidden; }
+  .progress-fill { height:100%; border-radius:4px; }
+  .fill-pagada { background:#22c55e; }
+  .fill-pendiente { background:#f59e0b; }
+  .fill-parcial { background:#f97316; }
+  .fill-vencida { background:#ef4444; }
+  .fill-cancelada { background:#94a3b8; }
+  .estado-pct { font-size:0.78rem; color:var(--text-muted); width:32px; text-align:right; flex-shrink:0; }
+
+  /* Metodo pago */
+  .metodo-list { display:flex; flex-direction:column; gap:8px; }
+  .metodo-row { display:flex; justify-content:space-between; font-size:0.875rem; padding:6px 0; border-bottom:1px solid var(--border); }
+  .metodo-row:last-child { border-bottom:none; }
+  .metodo-label { color:var(--text-muted); }
+  .metodo-total { font-weight:600; }
+
+  /* Ranking */
+  .ranking-list { display:flex; flex-direction:column; gap:4px; }
+  .ranking-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); }
+  .ranking-row:last-child { border-bottom:none; }
+  .ranking-pos { font-size:0.78rem; font-weight:700; color:var(--text-muted); width:18px; text-align:center; flex-shrink:0; }
+  .ranking-pos:nth-child(1) { color:#f59e0b; }
+  .ranking-avatar { width:32px; height:32px; border-radius:50%; background:#eff6ff; color:#2563eb; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:0.85rem; flex-shrink:0; }
+  .ranking-info { flex:1; min-width:0; }
+  .ranking-name { display:block; font-size:0.875rem; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ranking-sub { font-size:0.72rem; color:var(--text-muted); }
+  .ranking-value { font-weight:700; font-size:0.9rem; flex-shrink:0; }
+
+  /* Tables */
+  .table-wrapper { overflow-x:auto; margin:0 -20px; padding:0 20px; }
+  table { width:100%; border-collapse:collapse; }
+  th { background:#f8fafc; padding:8px 12px; text-align:left; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); border-bottom:1px solid var(--border); }
+  td { padding:10px 12px; border-bottom:1px solid var(--border); font-size:0.875rem; }
+  tr:last-child td { border-bottom:none; }
+  tfoot td { border-top:2px solid var(--border); padding:12px; }
+  .rank-num { color:var(--text-muted); font-weight:700; font-size:0.78rem; }
+  .link { color:var(--primary); text-decoration:none; }
+  .link:hover { text-decoration:underline; }
+
+  /* Badges */
+  .badge { display:inline-block; padding:2px 8px; border-radius:12px; font-size:0.72rem; font-weight:600; }
+  .badge-pagada, .badge-success { background:#dcfce7; color:#16a34a; }
+  .badge-pendiente { background:#fef9c3; color:#ca8a04; }
+  .badge-parcial { background:#fff7ed; color:#c2410c; }
+  .badge-vencida, .badge-danger { background:#fee2e2; color:#dc2626; }
+  .badge-cancelada { background:#f1f5f9; color:#64748b; }
+  .badge-secondary { background:#f1f5f9; color:#64748b; }
+  .badge-green { background:#dcfce7; color:#16a34a; }
+
+  .empty { color:var(--text-muted); font-size:0.875rem; padding:12px 0; }
+
+  /* Print */
+  @media print {
+    .page-header > div:last-child { display:none; }
+    .card { box-shadow:none; border:1px solid #e2e8f0; }
+  }
+
+  @media (max-width:1100px) {
+    .summary-grid { grid-template-columns:repeat(2,1fr); }
+    .two-col { grid-template-columns:1fr; }
+  }
+</style>

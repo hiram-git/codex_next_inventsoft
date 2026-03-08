@@ -1060,4 +1060,96 @@ export const store = {
 
     return factura;
   },
+
+  // --- Reportes ---
+  async getReporteVentas(mes: number, año: number) {
+    const prefix = `${año}-${String(mes).padStart(2, '0')}`;
+
+    const [rawFacturas, rawCobros] = await Promise.all([
+      db.select().from(schema.facturas).where(sql`${schema.facturas.fecha}::text LIKE ${prefix + '%'}`),
+      db.select().from(schema.cobros).where(sql`${schema.cobros.fecha}::text LIKE ${prefix + '%'}`),
+    ]);
+
+    const facturas = rawFacturas.map(normalizeFactura);
+    const cobros = rawCobros.map(normalizeCobro);
+
+    const facturasActivas = facturas.filter(f => f.estado !== 'cancelada');
+    const cobrosAplicados = cobros.filter(c => c.estado === 'aplicado');
+
+    const totalFacturado = facturasActivas.reduce((s, f) => s + f.total, 0);
+    const totalCobrado = cobrosAplicados.reduce((s, c) => s + c.monto, 0);
+    const saldoPendiente = Math.max(0, totalFacturado - totalCobrado);
+
+    // Count by estado
+    const porEstado: Record<string, number> = {};
+    for (const f of facturas) {
+      porEstado[f.estado] = (porEstado[f.estado] ?? 0) + 1;
+    }
+
+    // Top clientes by revenue
+    const porCliente = new Map<string, { nombre: string; total: number; count: number }>();
+    for (const f of facturasActivas) {
+      const prev = porCliente.get(f.clienteId);
+      if (prev) { prev.total += f.total; prev.count++; }
+      else porCliente.set(f.clienteId, { nombre: f.clienteNombre, total: f.total, count: 1 });
+    }
+    const topClientes = [...porCliente.values()].sort((a, b) => b.total - a.total).slice(0, 10);
+
+    // Top productos/servicios from items
+    const porProducto = new Map<string, { nombre: string; tipo: string; cantidad: number; total: number }>();
+    for (const f of facturasActivas) {
+      for (const item of f.items) {
+        const key = `${item.tipo ?? 'producto'}:${item.productoId}`;
+        const prev = porProducto.get(key);
+        if (prev) { prev.cantidad += item.cantidad; prev.total += item.subtotal; }
+        else porProducto.set(key, { nombre: item.productoNombre, tipo: item.tipo ?? 'producto', cantidad: item.cantidad, total: item.subtotal });
+      }
+    }
+    const topProductos = [...porProducto.values()].sort((a, b) => b.total - a.total).slice(0, 10);
+
+    // Cobros por método de pago
+    const porMetodo = new Map<string, number>();
+    for (const c of cobrosAplicados) {
+      porMetodo.set(c.metodoPago, (porMetodo.get(c.metodoPago) ?? 0) + c.monto);
+    }
+
+    return {
+      mes, año, prefix,
+      facturas,
+      cobros: cobrosAplicados,
+      totalFacturado,
+      totalCobrado,
+      saldoPendiente,
+      porEstado,
+      topClientes,
+      topProductos,
+      porMetodo: Object.fromEntries(porMetodo),
+    };
+  },
+
+  // Last N months summary for chart/comparison
+  async getResumenMensual(meses = 6) {
+    const resultado = [];
+    const now = new Date();
+    for (let i = meses - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const mes = d.getMonth() + 1;
+      const año = d.getFullYear();
+      const prefix = `${año}-${String(mes).padStart(2, '0')}`;
+
+      const [rawF, rawC] = await Promise.all([
+        db.select({ total: schema.facturas.total, estado: schema.facturas.estado })
+          .from(schema.facturas).where(sql`${schema.facturas.fecha}::text LIKE ${prefix + '%'}`),
+        db.select({ monto: schema.cobros.monto })
+          .from(schema.cobros).where(sql`${schema.cobros.fecha}::text LIKE ${prefix + '%'} AND ${schema.cobros.estado} = 'aplicado'`),
+      ]);
+
+      const facturado = rawF.filter(f => f.estado !== 'cancelada').reduce((s, f) => s + num(f.total), 0);
+      const cobrado = rawC.reduce((s, c) => s + num(c.monto), 0);
+      const label = d.toLocaleDateString('es-MX', { month: 'short', year: '2-digit' });
+
+      resultado.push({ mes, año, label, facturado, cobrado });
+    }
+    return resultado;
+  },
 };

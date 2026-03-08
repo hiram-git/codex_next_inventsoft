@@ -1,6 +1,7 @@
 ---
 import { getSession, login } from '../lib/auth';
 import { store } from '../lib/store';
+import bcrypt from 'bcryptjs';
 import '../styles/global.css';
 
 // If already logged in, redirect
@@ -17,7 +18,8 @@ if (Astro.request.method === 'POST') {
   const password = formData.get('password')?.toString() ?? '';
 
   const user = await store.getUsuarioByEmail(email);
-  if (user && user.password === password && user.activo) {
+  const passwordValid = user ? await bcrypt.compare(password, user.password) : false;
+  if (user && passwordValid && user.activo) {
     login(Astro.cookies, user.id);
     return Astro.redirect('/dashboard');
   }

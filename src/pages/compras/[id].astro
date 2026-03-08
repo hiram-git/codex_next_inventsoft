@@ -1,0 +1,142 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { store } from '../../lib/store';
+
+const { id } = Astro.params;
+let mensaje = '';
+let tipoMensaje = '';
+
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const action = formData.get('_action')?.toString();
+
+  if (action === 'recibir') {
+    const result = await store.recibirCompra(id ?? '');
+    if (result) {
+      mensaje = 'Compra recibida. Inventario actualizado.';
+      tipoMensaje = 'success';
+    } else {
+      mensaje = 'No se pudo recibir la compra.';
+      tipoMensaje = 'error';
+    }
+  }
+  if (action === 'cancelar') {
+    await store.cancelarCompra(id ?? '');
+    return Astro.redirect('/compras');
+  }
+}
+
+const compra = await store.getCompra(id ?? '');
+if (!compra) return Astro.redirect('/compras');
+
+const estadoBadge: Record<string, string> = {
+  borrador: 'badge-warning',
+  recibida: 'badge-success',
+  cancelada: 'badge-danger',
+};
+---
+
+<AdminLayout title={`Compra ${compra.numero}`}>
+  <div class="page-header">
+    <div style="display:flex;align-items:center;gap:12px">
+      <h1>Compra {compra.numero}</h1>
+      <span class:list={['badge', estadoBadge[compra.estado] ?? 'badge-secondary']}>{compra.estado}</span>
+    </div>
+    <div style="display:flex;gap:8px">
+      {compra.estado === 'borrador' && (
+        <>
+          <form method="POST" onsubmit="return confirm('¿Confirmar la recepción de esta compra? Se actualizará el inventario.')">
+            <input type="hidden" name="_action" value="recibir" />
+            <button type="submit" class="btn btn-success">
+              <span class="material-icons-round" style="font-size:18px">check_circle</span> Recibir Compra
+            </button>
+          </form>
+          <form method="POST" onsubmit="return confirm('¿Cancelar esta compra?')">
+            <input type="hidden" name="_action" value="cancelar" />
+            <button type="submit" class="btn btn-danger">
+              <span class="material-icons-round" style="font-size:18px">cancel</span> Cancelar
+            </button>
+          </form>
+        </>
+      )}
+      <a href="/compras" class="btn btn-secondary">
+        <span class="material-icons-round">arrow_back</span> Volver
+      </a>
+    </div>
+  </div>
+
+  {mensaje && <div class={`alert alert-${tipoMensaje}`}>{mensaje}</div>}
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="info-grid">
+      <div>
+        <h3 class="info-label">Proveedor</h3>
+        <p class="info-value">{compra.proveedorNombre}</p>
+      </div>
+      <div>
+        <h3 class="info-label">Almacén</h3>
+        <p class="info-value">{compra.almacenNombre}</p>
+      </div>
+      <div>
+        <h3 class="info-label">Fecha</h3>
+        <p class="info-value">{compra.fecha}</p>
+      </div>
+      <div>
+        <h3 class="info-label">Estado</h3>
+        <span class:list={['badge', estadoBadge[compra.estado] ?? 'badge-secondary']}>{compra.estado}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h2 style="font-size:1.1rem;margin-bottom:16px">Productos</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Producto</th>
+          <th>P. Unitario</th>
+          <th>Cantidad</th>
+          <th>Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        {compra.items.map(item => (
+          <tr>
+            <td>{item.productoNombre}</td>
+            <td>${item.precioUnitario.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td>{item.cantidad}</td>
+            <td><strong>${item.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</strong></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="totals">
+      <div class="total-row">
+        <span>Subtotal:</span>
+        <span>${compra.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+      </div>
+      <div class="total-row">
+        <span>IVA (16%):</span>
+        <span>${compra.iva.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+      </div>
+      <div class="total-row total-final">
+        <span>Total:</span>
+        <span>${compra.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+      </div>
+    </div>
+  </div>
+</AdminLayout>
+
+<style>
+  .info-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+  .info-label { font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; margin-bottom: 4px; }
+  .info-value { font-weight: 600; }
+  .totals { max-width: 300px; margin-left: auto; }
+  .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 0.95rem; }
+  .total-row + .total-row { border-top: 1px solid var(--border); }
+  .total-final { font-size: 1.15rem; font-weight: 700; color: var(--primary); }
+  @media (max-width: 768px) { .info-grid { grid-template-columns: 1fr 1fr; } }
+</style>

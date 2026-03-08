@@ -1,0 +1,112 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { store } from '../../lib/store';
+
+let mensaje = '';
+let tipoMensaje = '';
+
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const action = formData.get('_action')?.toString();
+
+  if (action === 'recibir') {
+    const id = formData.get('id')?.toString() ?? '';
+    const result = await store.recibirCompra(id);
+    if (result) {
+      mensaje = `Compra ${result.numero} recibida. Inventario actualizado.`;
+      tipoMensaje = 'success';
+    } else {
+      mensaje = 'No se pudo recibir la compra.';
+      tipoMensaje = 'error';
+    }
+  }
+
+  if (action === 'cancelar') {
+    const id = formData.get('id')?.toString() ?? '';
+    await store.cancelarCompra(id);
+    mensaje = 'Compra cancelada.';
+    tipoMensaje = 'success';
+  }
+}
+
+const compras = await store.getCompras();
+
+const estadoBadge: Record<string, string> = {
+  borrador: 'badge-warning',
+  recibida: 'badge-success',
+  cancelada: 'badge-danger',
+};
+---
+
+<AdminLayout title="Compras">
+  <div class="page-header">
+    <h1>Compras</h1>
+    <a href="/compras/nueva" class="btn btn-primary">
+      <span class="material-icons-round">add</span> Nueva Compra
+    </a>
+  </div>
+
+  {mensaje && <div class={`alert alert-${tipoMensaje}`}>{mensaje}</div>}
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Número</th>
+          <th>Fecha</th>
+          <th>Proveedor</th>
+          <th>Almacén</th>
+          <th>Items</th>
+          <th>Total</th>
+          <th>Estado</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {compras.map(c => (
+          <tr>
+            <td><strong>{c.numero}</strong></td>
+            <td>{c.fecha}</td>
+            <td>{c.proveedorNombre}</td>
+            <td>{c.almacenNombre}</td>
+            <td>{c.items.length} producto(s)</td>
+            <td><strong>${c.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</strong></td>
+            <td>
+              <span class:list={['badge', estadoBadge[c.estado] ?? 'badge-secondary']}>
+                {c.estado}
+              </span>
+            </td>
+            <td>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                <a href={`/compras/${c.id}`} class="btn btn-primary btn-sm" title="Ver detalle">
+                  <span class="material-icons-round" style="font-size:16px">visibility</span>
+                </a>
+                {c.estado === 'borrador' && (
+                  <>
+                    <form method="POST" style="display:inline" onsubmit="return confirm('¿Confirmar recepción de esta compra? Se actualizará el inventario.')">
+                      <input type="hidden" name="_action" value="recibir" />
+                      <input type="hidden" name="id" value={c.id} />
+                      <button type="submit" class="btn btn-success btn-sm" title="Recibir compra">
+                        <span class="material-icons-round" style="font-size:16px">check_circle</span>
+                      </button>
+                    </form>
+                    <form method="POST" style="display:inline" onsubmit="return confirm('¿Cancelar esta compra?')">
+                      <input type="hidden" name="_action" value="cancelar" />
+                      <input type="hidden" name="id" value={c.id} />
+                      <button type="submit" class="btn btn-danger btn-sm" title="Cancelar">
+                        <span class="material-icons-round" style="font-size:16px">cancel</span>
+                      </button>
+                    </form>
+                  </>
+                )}
+              </div>
+            </td>
+          </tr>
+        ))}
+        {compras.length === 0 && (
+          <tr><td colspan="8" style="text-align:center;color:var(--text-muted)">No hay compras registradas.</td></tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+</AdminLayout>

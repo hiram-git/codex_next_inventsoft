@@ -8,42 +8,43 @@ if (Astro.request.method === 'POST') {
   const formData = await Astro.request.formData();
   const clienteId = formData.get('clienteId')?.toString() ?? '';
   const almacenId = formData.get('almacenId')?.toString() ?? '';
-  const cliente = await store.getCliente(clienteId);
+  const notas = formData.get('notas')?.toString() ?? '';
+
+  const [cliente, almacen] = await Promise.all([
+    store.getCliente(clienteId),
+    store.getAlmacen(almacenId),
+  ]);
 
   if (!cliente) {
     error = 'Seleccione un cliente válido.';
+  } else if (!almacen) {
+    error = 'Seleccione un almacén válido.';
   } else {
     const itemsJson = formData.get('items_json')?.toString() ?? '[]';
     let items;
     try { items = JSON.parse(itemsJson); } catch { items = []; }
 
     if (items.length === 0) {
-      error = 'Agregue al menos un producto a la factura.';
+      error = 'Agregue al menos un producto al pedido.';
     } else {
-      const subtotal = items.reduce((sum: number, item: { subtotal: number }) => sum + item.subtotal, 0);
+      const subtotal = items.reduce((sum: number, i: { subtotal: number }) => sum + i.subtotal, 0);
       const iva = subtotal * 0.16;
       const total = subtotal + iva;
 
-      let almacenNombre = '';
-      if (almacenId) {
-        const almacen = await store.getAlmacen(almacenId);
-        almacenNombre = almacen?.nombre ?? '';
-      }
-
-      await store.createFactura({
+      await store.createPedido({
         clienteId,
         clienteNombre: cliente.nombre,
-        almacenId: almacenId || undefined,
-        almacenNombre: almacenNombre || undefined,
+        almacenId,
+        almacenNombre: almacen.nombre,
         items,
         subtotal,
         iva,
         total,
-        estado: 'pendiente',
+        notas,
         fecha: new Date().toISOString().split('T')[0],
       });
 
-      return Astro.redirect('/facturas');
+      return Astro.redirect('/pedidos');
     }
   }
 }
@@ -56,44 +57,44 @@ const [clientes, almacenes, allProductos] = await Promise.all([
 const productos = allProductos.filter(p => p.activo);
 ---
 
-<AdminLayout title="Nueva Factura">
+<AdminLayout title="Nuevo Pedido">
   <div class="page-header">
-    <h1>Nueva Factura</h1>
-    <a href="/facturas" class="btn btn-secondary">
+    <h1>Nuevo Pedido</h1>
+    <a href="/pedidos" class="btn btn-secondary">
       <span class="material-icons-round">arrow_back</span> Volver
     </a>
   </div>
 
   {error && <div class="alert alert-error">{error}</div>}
 
-  <form method="POST" id="facturaForm">
+  <form method="POST" id="pedidoForm">
     <input type="hidden" name="items_json" id="itemsJson" value="[]" />
 
     <div class="card" style="margin-bottom:16px">
-      <h2 style="font-size:1.1rem;margin-bottom:16px">Datos de la Factura</h2>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+      <h2 style="font-size:1.1rem;margin-bottom:16px">Datos del Pedido</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <div class="form-group">
           <label>Cliente</label>
           <select name="clienteId" class="form-control" required>
             <option value="">Seleccionar cliente...</option>
             {clientes.map(c => (
-              <option value={c.id}>{c.nombre} - {c.rfc}</option>
+              <option value={c.id}>{c.nombre}</option>
             ))}
           </select>
         </div>
         <div class="form-group">
-          <label>Almacén (salida de inventario)</label>
-          <select name="almacenId" class="form-control">
-            <option value="">Sin afectar inventario</option>
+          <label>Almacén de origen</label>
+          <select name="almacenId" class="form-control" required id="almacenSelect">
+            <option value="">Seleccionar almacén...</option>
             {almacenes.filter(a => a.activo).map(a => (
               <option value={a.id}>{a.nombre}</option>
             ))}
           </select>
         </div>
-        <div class="form-group">
-          <label>Fecha</label>
-          <input type="date" class="form-control" value={new Date().toISOString().split('T')[0]} disabled />
-        </div>
+      </div>
+      <div class="form-group">
+        <label>Notas</label>
+        <textarea name="notas" class="form-control" rows="2" placeholder="Notas adicionales..."></textarea>
       </div>
     </div>
 
@@ -106,8 +107,8 @@ const productos = allProductos.filter(p => p.activo);
           <select id="selProducto" class="form-control">
             <option value="">Seleccionar...</option>
             {productos.map(p => (
-              <option value={p.id} data-nombre={p.nombre} data-precio={p.precio} data-stock={p.stock}>
-                {p.nombre} - ${p.precio.toLocaleString('es-MX', { minimumFractionDigits: 2 })} (Stock: {p.stock})
+              <option value={p.id} data-nombre={p.nombre} data-precio={p.precio}>
+                {p.nombre} — ${p.precio.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
               </option>
             ))}
           </select>
@@ -121,7 +122,12 @@ const productos = allProductos.filter(p => p.activo);
         </button>
       </div>
 
-      <table id="itemsTable">
+      <div class="alert alert-info" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;margin-bottom:16px;font-size:0.875rem">
+        <span class="material-icons-round" style="font-size:16px;vertical-align:middle">info</span>
+        Al confirmar el pedido, el stock se reservará en el almacén seleccionado.
+      </div>
+
+      <table>
         <thead>
           <tr>
             <th>Producto</th>
@@ -132,7 +138,7 @@ const productos = allProductos.filter(p => p.activo);
           </tr>
         </thead>
         <tbody id="itemsBody">
-          <tr id="emptyRow">
+          <tr>
             <td colspan="5" style="text-align:center;color:var(--text-muted)">No se han agregado productos.</td>
           </tr>
         </tbody>
@@ -154,11 +160,10 @@ const productos = allProductos.filter(p => p.activo);
           <span id="totalDisplay">$0.00</span>
         </div>
       </div>
-
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px">
-        <a href="/facturas" class="btn btn-secondary">Cancelar</a>
+        <a href="/pedidos" class="btn btn-secondary">Cancelar</a>
         <button type="submit" class="btn btn-primary">
-          <span class="material-icons-round" style="font-size:18px">save</span> Crear Factura
+          <span class="material-icons-round" style="font-size:18px">save</span> Crear Pedido
         </button>
       </div>
     </div>
@@ -166,27 +171,10 @@ const productos = allProductos.filter(p => p.activo);
 </AdminLayout>
 
 <style>
-  .totals {
-    max-width: 300px;
-    margin-left: auto;
-  }
-
-  .total-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 8px 0;
-    font-size: 0.95rem;
-  }
-
-  .total-row + .total-row {
-    border-top: 1px solid var(--border);
-  }
-
-  .total-final {
-    font-size: 1.15rem;
-    font-weight: 700;
-    color: var(--primary);
-  }
+  .totals { max-width: 300px; margin-left: auto; }
+  .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 0.95rem; }
+  .total-row + .total-row { border-top: 1px solid var(--border); }
+  .total-final { font-size: 1.15rem; font-weight: 700; color: var(--primary); }
 </style>
 
 <script is:inline>
@@ -198,29 +186,19 @@ const productos = allProductos.filter(p => p.activo);
     const opt = sel.options[sel.selectedIndex];
 
     if (!sel.value) return alert('Seleccione un producto.');
-
     const productoId = sel.value;
     const productoNombre = opt.dataset.nombre;
     const precioUnitario = parseFloat(opt.dataset.precio);
-    const stock = parseInt(opt.dataset.stock);
     const cantidad = parseInt(cantInput.value) || 1;
 
     if (cantidad <= 0) return alert('La cantidad debe ser mayor a 0.');
-    if (cantidad > stock) return alert(`Stock insuficiente. Disponible: ${stock}`);
 
-    // Check if already added
     const existing = items.find(i => i.productoId === productoId);
     if (existing) {
       existing.cantidad += cantidad;
       existing.subtotal = existing.cantidad * existing.precioUnitario;
     } else {
-      items.push({
-        productoId,
-        productoNombre,
-        cantidad,
-        precioUnitario,
-        subtotal: cantidad * precioUnitario,
-      });
+      items.push({ productoId, productoNombre, cantidad, precioUnitario, subtotal: cantidad * precioUnitario });
     }
 
     sel.value = '';

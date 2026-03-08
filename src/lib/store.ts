@@ -18,6 +18,7 @@ export type Pedido = typeof schema.pedidos.$inferSelect;
 export type Servicio = typeof schema.servicios.$inferSelect;
 export type NotaCredito = typeof schema.notasCredito.$inferSelect;
 export type Cobro = typeof schema.cobros.$inferSelect;
+export type Cotizacion = typeof schema.cotizaciones.$inferSelect;
 
 // Helper: numeric columns come back as strings from pg, convert to number
 function num(v: string | number | null): number {
@@ -74,6 +75,24 @@ function normalizeNotaCredito(row: NotaCredito) {
 
 function normalizeCobro(row: Cobro) {
   return { ...row, id: String(row.id), facturaId: String(row.facturaId), clienteId: String(row.clienteId), monto: num(row.monto) };
+}
+
+function normalizeCotizacion(row: Cotizacion) {
+  return {
+    ...row,
+    id: String(row.id),
+    clienteId: String(row.clienteId),
+    facturaId: row.facturaId ? String(row.facturaId) : null,
+    subtotal: num(row.subtotal),
+    iva: num(row.iva),
+    total: num(row.total),
+    items: (row.items ?? []).map(i => ({
+      ...i,
+      tipo: (i.tipo ?? 'producto') as 'producto' | 'servicio',
+      precioUnitario: num(i.precioUnitario),
+      subtotal: num(i.subtotal),
+    })),
+  };
 }
 
 function normalizeCompra(row: Compra) {
@@ -952,5 +971,185 @@ export const store = {
 
     const rows = await db.update(schema.pedidos).set({ estado: 'despachado' }).where(eq(schema.pedidos.id, Number(id))).returning();
     return rows[0] ? normalizePedido(rows[0]) : null;
+  },
+
+  // --- Cotizaciones ---
+  async getCotizaciones() {
+    const rows = await db.select().from(schema.cotizaciones).orderBy(desc(schema.cotizaciones.id));
+    return rows.map(normalizeCotizacion);
+  },
+
+  async getCotizacion(id: string) {
+    const rows = await db.select().from(schema.cotizaciones).where(eq(schema.cotizaciones.id, Number(id)));
+    return rows[0] ? normalizeCotizacion(rows[0]) : undefined;
+  },
+
+  async getCotizacionesCliente(clienteId: string) {
+    const rows = await db.select().from(schema.cotizaciones)
+      .where(eq(schema.cotizaciones.clienteId, Number(clienteId)))
+      .orderBy(desc(schema.cotizaciones.id));
+    return rows.map(normalizeCotizacion);
+  },
+
+  async createCotizacion(data: {
+    clienteId: string;
+    clienteNombre: string;
+    items: { tipo: 'producto' | 'servicio'; productoId: string; productoNombre: string; cantidad: number; precioUnitario: number; subtotal: number }[];
+    subtotal: number;
+    iva: number;
+    total: number;
+    notas?: string;
+    fechaVencimiento?: string;
+    fecha: string;
+  }) {
+    const countResult = await db.select({ count: sql<number>`count(*)` }).from(schema.cotizaciones);
+    const count = Number(countResult[0].count);
+    const numero = `COT-${String(count + 1).padStart(3, '0')}`;
+
+    const rows = await db.insert(schema.cotizaciones).values({
+      numero,
+      clienteId: Number(data.clienteId),
+      clienteNombre: data.clienteNombre,
+      items: data.items,
+      subtotal: String(data.subtotal),
+      iva: String(data.iva),
+      total: String(data.total),
+      estado: 'borrador',
+      notas: data.notas ?? '',
+      fechaVencimiento: data.fechaVencimiento ?? null,
+      fecha: data.fecha,
+    }).returning();
+    return normalizeCotizacion(rows[0]);
+  },
+
+  async updateCotizacionEstado(id: string, estado: string) {
+    const rows = await db.update(schema.cotizaciones)
+      .set({ estado })
+      .where(eq(schema.cotizaciones.id, Number(id)))
+      .returning();
+    return rows[0] ? normalizeCotizacion(rows[0]) : null;
+  },
+
+  // Convert a cotizacion to a factura (almacen optional, applies inventory rules)
+  async convertirCotizacionAFactura(cotizacionId: string, almacenId?: string) {
+    const cot = await this.getCotizacion(cotizacionId);
+    if (!cot || cot.estado === 'convertida' || cot.estado === 'rechazada') return null;
+
+    let almacenNombre = '';
+    if (almacenId) {
+      const alm = await this.getAlmacen(almacenId);
+      almacenNombre = alm?.nombre ?? '';
+    }
+
+    const factura = await this.createFactura({
+      clienteId: cot.clienteId,
+      clienteNombre: cot.clienteNombre,
+      almacenId: almacenId ?? undefined,
+      almacenNombre: almacenNombre || undefined,
+      items: cot.items,
+      subtotal: cot.subtotal,
+      iva: cot.iva,
+      total: cot.total,
+      estado: 'pendiente',
+      fecha: new Date().toISOString().split('T')[0],
+    });
+
+    await db.update(schema.cotizaciones)
+      .set({ estado: 'convertida', facturaId: Number(factura.id), facturaNumero: factura.numero })
+      .where(eq(schema.cotizaciones.id, Number(cotizacionId)));
+
+    return factura;
+  },
+
+  // --- Reportes ---
+  async getReporteVentas(mes: number, año: number) {
+    const prefix = `${año}-${String(mes).padStart(2, '0')}`;
+
+    const [rawFacturas, rawCobros] = await Promise.all([
+      db.select().from(schema.facturas).where(sql`${schema.facturas.fecha}::text LIKE ${prefix + '%'}`),
+      db.select().from(schema.cobros).where(sql`${schema.cobros.fecha}::text LIKE ${prefix + '%'}`),
+    ]);
+
+    const facturas = rawFacturas.map(normalizeFactura);
+    const cobros = rawCobros.map(normalizeCobro);
+
+    const facturasActivas = facturas.filter(f => f.estado !== 'cancelada');
+    const cobrosAplicados = cobros.filter(c => c.estado === 'aplicado');
+
+    const totalFacturado = facturasActivas.reduce((s, f) => s + f.total, 0);
+    const totalCobrado = cobrosAplicados.reduce((s, c) => s + c.monto, 0);
+    const saldoPendiente = Math.max(0, totalFacturado - totalCobrado);
+
+    // Count by estado
+    const porEstado: Record<string, number> = {};
+    for (const f of facturas) {
+      porEstado[f.estado] = (porEstado[f.estado] ?? 0) + 1;
+    }
+
+    // Top clientes by revenue
+    const porCliente = new Map<string, { nombre: string; total: number; count: number }>();
+    for (const f of facturasActivas) {
+      const prev = porCliente.get(f.clienteId);
+      if (prev) { prev.total += f.total; prev.count++; }
+      else porCliente.set(f.clienteId, { nombre: f.clienteNombre, total: f.total, count: 1 });
+    }
+    const topClientes = [...porCliente.values()].sort((a, b) => b.total - a.total).slice(0, 10);
+
+    // Top productos/servicios from items
+    const porProducto = new Map<string, { nombre: string; tipo: string; cantidad: number; total: number }>();
+    for (const f of facturasActivas) {
+      for (const item of f.items) {
+        const key = `${item.tipo ?? 'producto'}:${item.productoId}`;
+        const prev = porProducto.get(key);
+        if (prev) { prev.cantidad += item.cantidad; prev.total += item.subtotal; }
+        else porProducto.set(key, { nombre: item.productoNombre, tipo: item.tipo ?? 'producto', cantidad: item.cantidad, total: item.subtotal });
+      }
+    }
+    const topProductos = [...porProducto.values()].sort((a, b) => b.total - a.total).slice(0, 10);
+
+    // Cobros por método de pago
+    const porMetodo = new Map<string, number>();
+    for (const c of cobrosAplicados) {
+      porMetodo.set(c.metodoPago, (porMetodo.get(c.metodoPago) ?? 0) + c.monto);
+    }
+
+    return {
+      mes, año, prefix,
+      facturas,
+      cobros: cobrosAplicados,
+      totalFacturado,
+      totalCobrado,
+      saldoPendiente,
+      porEstado,
+      topClientes,
+      topProductos,
+      porMetodo: Object.fromEntries(porMetodo),
+    };
+  },
+
+  // Last N months summary for chart/comparison
+  async getResumenMensual(meses = 6) {
+    const resultado = [];
+    const now = new Date();
+    for (let i = meses - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const mes = d.getMonth() + 1;
+      const año = d.getFullYear();
+      const prefix = `${año}-${String(mes).padStart(2, '0')}`;
+
+      const [rawF, rawC] = await Promise.all([
+        db.select({ total: schema.facturas.total, estado: schema.facturas.estado })
+          .from(schema.facturas).where(sql`${schema.facturas.fecha}::text LIKE ${prefix + '%'}`),
+        db.select({ monto: schema.cobros.monto })
+          .from(schema.cobros).where(sql`${schema.cobros.fecha}::text LIKE ${prefix + '%'} AND ${schema.cobros.estado} = 'aplicado'`),
+      ]);
+
+      const facturado = rawF.filter(f => f.estado !== 'cancelada').reduce((s, f) => s + num(f.total), 0);
+      const cobrado = rawC.reduce((s, c) => s + num(c.monto), 0);
+      const label = d.toLocaleDateString('es-MX', { month: 'short', year: '2-digit' });
+
+      resultado.push({ mes, año, label, facturado, cobrado });
+    }
+    return resultado;
   },
 };

@@ -1,0 +1,271 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { store } from '../../lib/store';
+
+const { id } = Astro.params;
+let error = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = form.get('action')?.toString();
+
+  if (action === 'estado') {
+    await store.updateCotizacionEstado(id!, form.get('estado')?.toString() ?? '');
+  } else if (action === 'convertir') {
+    const almacenId = form.get('almacenId')?.toString() || undefined;
+    const factura = await store.convertirCotizacionAFactura(id!, almacenId);
+    if (factura) return Astro.redirect(`/facturas/${factura.id}`);
+    error = 'No se pudo convertir la cotización.';
+  }
+}
+
+const cot = await store.getCotizacion(id!);
+if (!cot) return Astro.redirect('/cotizaciones');
+
+const almacenes = await store.getAlmacenes();
+const today = new Date().toISOString().split('T')[0];
+const vencida = cot.fechaVencimiento && cot.fechaVencimiento < today && cot.estado !== 'convertida' && cot.estado !== 'rechazada';
+
+const estadoMeta: Record<string, { label: string; cls: string }> = {
+  borrador:   { label: 'Borrador',   cls: 'badge-secondary' },
+  enviada:    { label: 'Enviada',    cls: 'badge-info' },
+  aceptada:   { label: 'Aceptada',   cls: 'badge-success' },
+  rechazada:  { label: 'Rechazada',  cls: 'badge-danger' },
+  vencida:    { label: 'Vencida',    cls: 'badge-danger' },
+  convertida: { label: 'Convertida', cls: 'badge-purple' },
+};
+const meta = estadoMeta[cot.estado] ?? { label: cot.estado, cls: 'badge-secondary' };
+
+const acciones: { estado: string; label: string; cls: string }[] = [];
+if (cot.estado === 'borrador') {
+  acciones.push({ estado: 'enviada', label: 'Marcar como Enviada', cls: 'btn-info' });
+  acciones.push({ estado: 'rechazada', label: 'Rechazar', cls: 'btn-danger' });
+}
+if (cot.estado === 'enviada') {
+  acciones.push({ estado: 'aceptada', label: 'Marcar Aceptada', cls: 'btn-success' });
+  acciones.push({ estado: 'rechazada', label: 'Rechazar', cls: 'btn-danger' });
+}
+---
+
+<AdminLayout title={`Cotización ${cot.numero}`}>
+  <div class="page-header">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <h1>{cot.numero}</h1>
+      <span class:list={['badge', meta.cls]}>{meta.label}</span>
+      {vencida && <span class="badge badge-danger">Expirada</span>}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a href={`/cotizaciones/${id}/imprimir`} target="_blank" class="btn btn-outline">
+        <span class="material-icons-round" style="font-size:18px">print</span> Imprimir
+      </a>
+      {(cot.estado === 'aceptada' || cot.estado === 'enviada' || cot.estado === 'borrador') && cot.estado !== 'convertida' && (
+        <button class="btn btn-primary" onclick="document.getElementById('modalConvertir').showModal()">
+          <span class="material-icons-round" style="font-size:18px">receipt</span> Convertir a Factura
+        </button>
+      )}
+      <a href="/cotizaciones" class="btn btn-secondary">
+        <span class="material-icons-round">arrow_back</span> Volver
+      </a>
+    </div>
+  </div>
+
+  {error && (
+    <div class="alert alert-danger">{error}</div>
+  )}
+
+  {vencida && (
+    <div class="alert alert-warning">
+      <span class="material-icons-round">warning</span>
+      Esta cotización expiró el <strong>{cot.fechaVencimiento}</strong>
+    </div>
+  )}
+
+  {cot.estado === 'convertida' && cot.facturaNumero && (
+    <div class="alert alert-success">
+      <span class="material-icons-round">check_circle</span>
+      Cotización convertida a factura
+      <a href={`/facturas/${cot.facturaId}`} class="link" style="margin-left:6px;font-weight:600">{cot.facturaNumero}</a>
+    </div>
+  )}
+
+  <div class="layout">
+    <div class="main-col">
+      <!-- Info -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">Cliente</span>
+            <span class="info-value">{cot.clienteNombre}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Fecha</span>
+            <span class="info-value">{cot.fecha}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Válida hasta</span>
+            <span class="info-value" class:list={[{ 'text-danger': !!vencida }]}>
+              {cot.fechaVencimiento ?? '—'}
+            </span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Estado</span>
+            <span class:list={['badge', meta.cls]}>{meta.label}</span>
+          </div>
+          {cot.notas && (
+            <div class="info-item full-width">
+              <span class="info-label">Notas / Condiciones</span>
+              <span class="info-value">{cot.notas}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <!-- Items -->
+      <div class="card" style="margin-bottom:16px">
+        <h2>Detalle</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Descripción</th>
+              <th>Tipo</th>
+              <th>P. Unitario</th>
+              <th>Cantidad</th>
+              <th>Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cot.items.map(item => (
+              <tr>
+                <td>{item.productoNombre}</td>
+                <td>
+                  <span class:list={['badge', item.tipo === 'servicio' ? 'badge-secondary' : 'badge-green']}>
+                    {item.tipo === 'servicio' ? 'Servicio' : 'Producto'}
+                  </span>
+                </td>
+                <td>${item.precioUnitario.toFixed(2)}</td>
+                <td>{item.cantidad}</td>
+                <td><strong>${item.subtotal.toFixed(2)}</strong></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Totals -->
+      <div class="card">
+        <div class="totals">
+          <div class="total-row"><span>Subtotal:</span><span>${cot.subtotal.toFixed(2)}</span></div>
+          <div class="total-row"><span>IVA (16%):</span><span>${cot.iva.toFixed(2)}</span></div>
+          <div class="total-row total-final"><span>Total:</span><span>${cot.total.toFixed(2)}</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar: state actions -->
+    {acciones.length > 0 && (
+      <div class="side-col">
+        <div class="card">
+          <h2>Cambiar Estado</h2>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            {acciones.map(a => (
+              <form method="POST">
+                <input type="hidden" name="action" value="estado" />
+                <input type="hidden" name="estado" value={a.estado} />
+                <button type="submit" class:list={['btn', 'btn-block', a.cls]}>{a.label}</button>
+              </form>
+            ))}
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+
+  <!-- Convertir Modal -->
+  <dialog id="modalConvertir">
+    <div class="modal-content">
+      <h3>Convertir a Factura</h3>
+      <p>Se creará una factura con los mismos items de esta cotización.</p>
+      <form method="POST">
+        <input type="hidden" name="action" value="convertir" />
+        <div class="form-group">
+          <label>Almacén para salida de inventario (opcional)</label>
+          <select name="almacenId" class="form-control">
+            <option value="">Sin afectar inventario</option>
+            {almacenes.filter(a => a.activo).map(a => (
+              <option value={a.id}>{a.nombre}</option>
+            ))}
+          </select>
+          <small class="hint">Solo productos afectan el inventario. Servicios siempre quedan sin movimiento.</small>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalConvertir').close()">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Crear Factura</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+</AdminLayout>
+
+<style>
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; gap: 12px; }
+  h1 { font-size: 1.5rem; font-weight: 700; margin: 0; }
+  h2 { font-size: 1rem; font-weight: 600; margin: 0 0 16px; }
+  .text-danger { color: var(--danger); }
+  .alert { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-radius: var(--radius); margin-bottom: 16px; font-size: 0.875rem; }
+  .alert-danger { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
+  .alert-warning { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+  .alert-success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+  .layout { display: grid; grid-template-columns: 1fr 260px; gap: 16px; }
+  .main-col { min-width: 0; }
+  .card { background: white; border-radius: var(--radius); border: 1px solid var(--border); padding: 24px; }
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; }
+  .info-item { display: flex; flex-direction: column; gap: 4px; }
+  .full-width { grid-column: 1 / -1; }
+  .info-label { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .info-value { font-size: 0.9rem; font-weight: 500; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #f8fafc; padding: 8px 12px; text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 0.875rem; }
+  tr:last-child td { border-bottom: none; }
+  .totals { max-width: 280px; margin-left: auto; }
+  .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 0.95rem; }
+  .total-row + .total-row { border-top: 1px solid var(--border); }
+  .total-final { font-size: 1.1rem; font-weight: 700; color: var(--primary); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: 600; }
+  .badge-secondary { background: #f1f5f9; color: #64748b; }
+  .badge-info { background: #dbeafe; color: #2563eb; }
+  .badge-success { background: #dcfce7; color: #16a34a; }
+  .badge-green { background: #dcfce7; color: #16a34a; }
+  .badge-danger { background: #fee2e2; color: #dc2626; }
+  .badge-purple { background: #f3e8ff; color: #7c3aed; }
+  .link { color: var(--primary); text-decoration: none; }
+  .link:hover { text-decoration: underline; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius); font-size: 0.875rem; font-weight: 500; border: 1px solid transparent; cursor: pointer; text-decoration: none; transition: all 0.2s; width: auto; }
+  .btn-block { width: 100%; }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-secondary { background: white; border-color: var(--border); color: var(--text); }
+  .btn-secondary:hover { background: #f8fafc; }
+  .btn-outline { background: white; border-color: var(--border); color: var(--text); }
+  .btn-outline:hover { background: #f8fafc; }
+  .btn-success { background: #16a34a; color: white; }
+  .btn-success:hover { background: #15803d; }
+  .btn-info { background: #2563eb; color: white; }
+  .btn-info:hover { background: #1d4ed8; }
+  .btn-danger { background: var(--danger); color: white; }
+  .btn-danger:hover { background: #b91c1c; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 16px; }
+  .form-group label { font-weight: 500; font-size: 0.875rem; }
+  .form-control { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; font-size: 0.875rem; width: 100%; box-sizing: border-box; }
+  .hint { font-size: 0.78rem; color: var(--text-muted); }
+  dialog { border: none; border-radius: var(--radius); box-shadow: 0 10px 40px rgba(0,0,0,0.2); padding: 0; max-width: 460px; width: 90%; }
+  dialog::backdrop { background: rgba(0,0,0,0.4); }
+  .modal-content { padding: 28px; }
+  .modal-content h3 { margin: 0 0 8px; font-size: 1.1rem; }
+  .modal-content p { margin: 0 0 16px; font-size: 0.875rem; color: var(--text-muted); }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 8px; }
+  @media (max-width: 800px) {
+    .layout { grid-template-columns: 1fr; }
+    .info-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>

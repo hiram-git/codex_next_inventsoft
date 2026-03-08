@@ -1,0 +1,243 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { store } from '../../lib/store';
+
+let error = '';
+
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const clienteId = formData.get('clienteId')?.toString() ?? '';
+  const cliente = await store.getCliente(clienteId);
+
+  if (!cliente) {
+    error = 'Seleccione un cliente válido.';
+  } else {
+    const itemsJson = formData.get('items_json')?.toString() ?? '[]';
+    let items;
+    try { items = JSON.parse(itemsJson); } catch { items = []; }
+
+    if (items.length === 0) {
+      error = 'Agregue al menos un producto o servicio.';
+    } else {
+      const subtotal = items.reduce((sum: number, item: { subtotal: number }) => sum + item.subtotal, 0);
+      const iva = subtotal * 0.16;
+      const total = subtotal + iva;
+
+      const cot = await store.createCotizacion({
+        clienteId,
+        clienteNombre: cliente.nombre,
+        items,
+        subtotal,
+        iva,
+        total,
+        notas: formData.get('notas')?.toString() ?? '',
+        fechaVencimiento: formData.get('fechaVencimiento')?.toString() || undefined,
+        fecha: new Date().toISOString().split('T')[0],
+      });
+
+      return Astro.redirect(`/cotizaciones/${cot.id}`);
+    }
+  }
+}
+
+const [clientes, allProductos, allServicios] = await Promise.all([
+  store.getClientes(),
+  store.getProductos(),
+  store.getServicios(),
+]);
+const productos = allProductos.filter(p => p.activo);
+const servicios = allServicios.filter(s => s.activo);
+---
+
+<AdminLayout title="Nueva Cotización">
+  <div class="page-header">
+    <div>
+      <h1>Nueva Cotización</h1>
+      <p class="text-muted">No afecta inventario ni reserva stock</p>
+    </div>
+    <a href="/cotizaciones" class="btn btn-secondary">
+      <span class="material-icons-round">arrow_back</span> Volver
+    </a>
+  </div>
+
+  {error && <div class="alert alert-error">{error}</div>}
+
+  <form method="POST" id="cotForm">
+    <input type="hidden" name="items_json" id="itemsJson" value="[]" />
+
+    <div class="card" style="margin-bottom:16px">
+      <h2 style="font-size:1.1rem;margin-bottom:16px">Datos de la Cotización</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+        <div class="form-group">
+          <label>Cliente *</label>
+          <select name="clienteId" class="form-control" required>
+            <option value="">Seleccionar cliente...</option>
+            {clientes.map(c => (
+              <option value={c.id}>{c.nombre}</option>
+            ))}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Válida hasta</label>
+          <input type="date" name="fechaVencimiento" class="form-control" />
+          <small class="hint">Fecha de expiración de la cotización</small>
+        </div>
+        <div class="form-group">
+          <label>Notas / Condiciones</label>
+          <input type="text" name="notas" class="form-control" placeholder="Condiciones de pago, entrega, etc." />
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <h2 style="font-size:1.1rem;margin-bottom:16px">Productos y Servicios</h2>
+
+      <div style="display:grid;grid-template-columns:2fr 1fr auto;gap:8px;margin-bottom:16px;align-items:end">
+        <div class="form-group" style="margin-bottom:0">
+          <label>Producto / Servicio</label>
+          <select id="selItem" class="form-control">
+            <option value="">Seleccionar...</option>
+            {productos.length > 0 && (
+              <optgroup label="📦 Productos">
+                {productos.map(p => (
+                  <option value={`producto:${p.id}`} data-tipo="producto" data-nombre={p.nombre} data-precio={p.precio}>
+                    {p.nombre} — ${p.precio.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {servicios.length > 0 && (
+              <optgroup label="🔧 Servicios">
+                {servicios.map(s => (
+                  <option value={`servicio:${s.id}`} data-tipo="servicio" data-nombre={s.nombre} data-precio={s.precio}>
+                    {s.nombre} — ${s.precio.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>Cantidad</label>
+          <input type="number" id="cantidad" class="form-control" min="1" value="1" />
+        </div>
+        <button type="button" class="btn btn-success" onclick="addItem()" style="height:38px">
+          <span class="material-icons-round" style="font-size:18px">add</span> Agregar
+        </button>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Descripción</th>
+            <th>Tipo</th>
+            <th>P. Unitario</th>
+            <th>Cantidad</th>
+            <th>Subtotal</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="itemsBody">
+          <tr>
+            <td colspan="6" style="text-align:center;color:var(--text-muted)">No se han agregado items.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="totals">
+        <div class="total-row"><span>Subtotal:</span><span id="subtotalDisplay">$0.00</span></div>
+        <div class="total-row"><span>IVA (16%):</span><span id="ivaDisplay">$0.00</span></div>
+        <div class="total-row total-final"><span>Total:</span><span id="totalDisplay">$0.00</span></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px">
+        <a href="/cotizaciones" class="btn btn-secondary">Cancelar</a>
+        <button type="submit" class="btn btn-primary">
+          <span class="material-icons-round" style="font-size:18px">save</span> Crear Cotización
+        </button>
+      </div>
+    </div>
+  </form>
+</AdminLayout>
+
+<style>
+  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  h1 { font-size: 1.5rem; font-weight: 700; margin: 0; }
+  .text-muted { color: var(--text-muted); font-size: 0.875rem; margin: 4px 0 0; }
+  .card { background: white; border-radius: var(--radius); border: 1px solid var(--border); padding: 24px; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 0; }
+  label { font-weight: 500; font-size: 0.875rem; }
+  .form-control { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; font-size: 0.875rem; width: 100%; box-sizing: border-box; }
+  .form-control:focus { outline: none; border-color: var(--primary); }
+  .hint { font-size: 0.78rem; color: var(--text-muted); }
+  .alert { padding: 12px 16px; border-radius: var(--radius); margin-bottom: 16px; }
+  .alert-error { background: #fee2e2; color: var(--danger); }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #f8fafc; padding: 8px 12px; text-align: left; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 0.875rem; }
+  tr:last-child td { border-bottom: none; }
+  .totals { max-width: 300px; margin-left: auto; }
+  .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 0.95rem; }
+  .total-row + .total-row { border-top: 1px solid var(--border); }
+  .total-final { font-size: 1.15rem; font-weight: 700; color: var(--primary); }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius); font-size: 0.875rem; font-weight: 500; border: none; cursor: pointer; text-decoration: none; transition: all 0.2s; }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-secondary { background: white; border: 1px solid var(--border); color: var(--text); }
+  .btn-success { background: #16a34a; color: white; }
+  .btn-danger { background: var(--danger); color: white; }
+  .btn-sm { padding: 4px 8px; }
+</style>
+
+<script is:inline>
+  let items = [];
+
+  function addItem() {
+    const sel = document.getElementById('selItem');
+    const cantInput = document.getElementById('cantidad');
+    const opt = sel.options[sel.selectedIndex];
+    if (!sel.value) return alert('Seleccione un producto o servicio.');
+    const [tipo, itemId] = sel.value.split(':');
+    const productoNombre = opt.dataset.nombre;
+    const precioUnitario = parseFloat(opt.dataset.precio);
+    const cantidad = parseInt(cantInput.value) || 1;
+    if (cantidad <= 0) return alert('La cantidad debe ser mayor a 0.');
+    const existing = items.find(i => i.tipo === tipo && i.productoId === itemId);
+    if (existing) {
+      existing.cantidad += cantidad;
+      existing.subtotal = existing.cantidad * existing.precioUnitario;
+    } else {
+      items.push({ tipo, productoId: itemId, productoNombre, cantidad, precioUnitario, subtotal: cantidad * precioUnitario });
+    }
+    sel.value = ''; cantInput.value = '1';
+    renderItems();
+  }
+
+  function removeItem(index) { items.splice(index, 1); renderItems(); }
+
+  function renderItems() {
+    const tbody = document.getElementById('itemsBody');
+    const fmt = (n) => '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 2 });
+    if (items.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">No se han agregado items.</td></tr>';
+    } else {
+      tbody.innerHTML = items.map((item, i) => `
+        <tr>
+          <td>${item.productoNombre}</td>
+          <td>${item.tipo === 'servicio' ? '<span style="background:var(--bg);color:var(--text-muted);padding:2px 8px;border-radius:12px;font-size:0.75rem;font-weight:600">Servicio</span>' : '<span style="background:#dcfce7;color:#16a34a;padding:2px 8px;border-radius:12px;font-size:0.75rem;font-weight:600">Producto</span>'}</td>
+          <td>${fmt(item.precioUnitario)}</td>
+          <td>${item.cantidad}</td>
+          <td><strong>${fmt(item.subtotal)}</strong></td>
+          <td><button type="button" onclick="removeItem(${i})" style="background:none;border:none;cursor:pointer;color:var(--danger)"><span class="material-icons-round" style="font-size:18px">close</span></button></td>
+        </tr>
+      `).join('');
+    }
+    const subtotal = items.reduce((s, i) => s + i.subtotal, 0);
+    const iva = subtotal * 0.16;
+    const total = subtotal + iva;
+    document.getElementById('subtotalDisplay').textContent = fmt(subtotal);
+    document.getElementById('ivaDisplay').textContent = fmt(iva);
+    document.getElementById('totalDisplay').textContent = fmt(total);
+    document.getElementById('itemsJson').value = JSON.stringify(items);
+  }
+</script>

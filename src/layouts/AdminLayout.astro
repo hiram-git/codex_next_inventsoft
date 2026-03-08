@@ -14,6 +14,7 @@ const menuItems = [
   { href: '/clientes', label: 'Clientes', icon: 'people' },
   { href: '/productos', label: 'Productos', icon: 'inventory' },
   { href: '/servicios', label: 'Servicios', icon: 'build' },
+  { href: '/cotizaciones', label: 'Cotizaciones', icon: 'request_quote' },
   { href: '/facturas', label: 'Facturas', icon: 'receipt' },
   { href: '/notas-credito', label: 'Notas de Crédito', icon: 'undo' },
   { href: '/pedidos', label: 'Pedidos', icon: 'shopping_cart' },
@@ -29,6 +30,10 @@ const inventarioItems = [
   { href: '/inventario', label: 'Inventario', icon: 'view_list' },
   { href: '/compras', label: 'Compras', icon: 'local_shipping' },
   { href: '/kardex', label: 'Kardex', icon: 'swap_vert' },
+];
+
+const reportesItems = [
+  { href: '/reportes/ventas', label: 'Ventas Mensuales', icon: 'bar_chart' },
 ];
 
 const configItems = [
@@ -82,6 +87,16 @@ const configItems = [
       <div class="nav-section">
         <span class="nav-section-title">Control de Inventario</span>
         {inventarioItems.map(item => (
+          <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]}>
+            <span class="material-icons-round">{item.icon}</span>
+            {item.label}
+          </a>
+        ))}
+      </div>
+
+      <div class="nav-section">
+        <span class="nav-section-title">Reportes</span>
+        {reportesItems.map(item => (
           <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]}>
             <span class="material-icons-round">{item.icon}</span>
             {item.label}

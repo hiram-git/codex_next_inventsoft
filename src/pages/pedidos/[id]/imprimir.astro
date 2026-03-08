@@ -1,0 +1,144 @@
+---
+import { store } from '../../../lib/store';
+
+const { id } = Astro.params;
+const pedido = await store.getPedido(id!);
+if (!pedido) return Astro.redirect('/pedidos');
+
+const empresa = await store.getEmpresa();
+
+const estadoColor: Record<string, string> = {
+  borrador: '#ca8a04', confirmado: '#2563eb', despachado: '#16a34a', cancelado: '#dc2626',
+};
+---
+
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pedido {pedido.numero}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; color: #1e293b; background: #f1f5f9; }
+    .print-wrapper { max-width: 800px; margin: 24px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+    .doc-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 2px solid #e2e8f0; }
+    .empresa-name { font-size: 22px; font-weight: 700; }
+    .empresa-info { font-size: 12px; color: #64748b; margin-top: 4px; line-height: 1.6; }
+    .doc-type { font-size: 24px; font-weight: 800; color: #16a34a; text-transform: uppercase; letter-spacing: 0.05em; }
+    .doc-numero { font-size: 18px; font-weight: 600; }
+    .doc-fecha { font-size: 12px; color: #64748b; margin-top: 4px; }
+    .client-section { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 28px; background: #f8fafc; border-radius: 6px; padding: 16px; }
+    .field-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #94a3b8; margin-bottom: 2px; font-weight: 600; }
+    .field-value { font-size: 13px; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+    thead th { background: #166534; color: white; padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+    thead th:last-child { text-align: right; }
+    tbody td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody td:last-child { text-align: right; font-weight: 600; }
+    tbody tr:nth-child(even) { background: #f8fafc; }
+    .totals-section { display: flex; justify-content: flex-end; }
+    .totals-table { width: 280px; }
+    .totals-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
+    .totals-row + .totals-row { border-top: 1px solid #e2e8f0; }
+    .totals-row.final { font-size: 16px; font-weight: 700; color: #16a34a; padding-top: 10px; border-top: 2px solid #16a34a; }
+    .estado-pill { display: inline-block; padding: 3px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; background: #f0fdf4; color: #16a34a; }
+    .notas-box { background: #f8fafc; border-radius: 6px; padding: 12px 16px; margin-bottom: 24px; font-size: 12px; color: #64748b; }
+    .notas-box strong { display: block; margin-bottom: 4px; color: #1e293b; }
+    .doc-footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; }
+    .footer-text { font-size: 11px; color: #94a3b8; }
+    .print-controls { display: flex; justify-content: center; gap: 12px; padding: 16px; background: #1e293b; border-radius: 8px 8px 0 0; }
+    .btn-print { display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; background: #16a34a; color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .btn-back { display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; background: transparent; color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; font-size: 14px; cursor: pointer; text-decoration: none; }
+    @media print {
+      body { background: white; }
+      .print-controls { display: none; }
+      .print-wrapper { margin: 0; padding: 24px; box-shadow: none; border-radius: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-controls">
+    <a href={`/pedidos/${pedido.id}`} class="btn-back">← Volver</a>
+    <button class="btn-print" onclick="window.print()">🖨 Imprimir / Guardar PDF</button>
+  </div>
+
+  <div class="print-wrapper">
+    <div class="doc-header">
+      <div>
+        <div class="empresa-name">{empresa?.nombre ?? 'Mi Empresa'}</div>
+        <div class="empresa-info">
+          {empresa?.rfc && <span>RFC: {empresa.rfc}<br/></span>}
+          {empresa?.direccion && <span>{empresa.direccion}<br/></span>}
+          {empresa?.telefono && <span>Tel: {empresa.telefono}</span>}
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div class="doc-type">Pedido</div>
+        <div class="doc-numero">{pedido.numero}</div>
+        <div class="doc-fecha">Fecha: {pedido.fecha}</div>
+        <div style="margin-top:6px">
+          <span class="estado-pill">{pedido.estado}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="client-section">
+      <div>
+        <div class="field-label">Cliente</div>
+        <div class="field-value">{pedido.clienteNombre}</div>
+      </div>
+      <div>
+        <div class="field-label">Almacén</div>
+        <div class="field-value">{pedido.almacenNombre}</div>
+      </div>
+      <div>
+        <div class="field-label">Estado</div>
+        <div class="field-value">{pedido.estado.charAt(0).toUpperCase() + pedido.estado.slice(1)}</div>
+      </div>
+    </div>
+
+    {pedido.notas && (
+      <div class="notas-box">
+        <strong>Notas:</strong>
+        {pedido.notas}
+      </div>
+    )}
+
+    <table>
+      <thead>
+        <tr>
+          <th>Producto</th>
+          <th style="text-align:right">P. Unitario</th>
+          <th style="text-align:right">Cantidad</th>
+          <th style="text-align:right">Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        {pedido.items.map(item => (
+          <tr>
+            <td>{item.productoNombre}</td>
+            <td style="text-align:right">${item.precioUnitario.toFixed(2)}</td>
+            <td style="text-align:right">{item.cantidad}</td>
+            <td>${item.subtotal.toFixed(2)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+
+    <div class="totals-section">
+      <div class="totals-table">
+        <div class="totals-row"><span>Subtotal</span><span>${pedido.subtotal.toFixed(2)}</span></div>
+        <div class="totals-row"><span>IVA (16%)</span><span>${pedido.iva.toFixed(2)}</span></div>
+        <div class="totals-row final"><span>Total</span><span>${pedido.total.toFixed(2)}</span></div>
+      </div>
+    </div>
+
+    <div class="doc-footer">
+      <span class="footer-text">Generado el {new Date().toLocaleDateString('es-MX')}</span>
+      <span class="footer-text">{pedido.numero} — {empresa?.nombre ?? ''}</span>
+    </div>
+  </div>
+</body>
+</html>

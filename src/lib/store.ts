@@ -18,6 +18,7 @@ export type Pedido = typeof schema.pedidos.$inferSelect;
 export type Servicio = typeof schema.servicios.$inferSelect;
 export type NotaCredito = typeof schema.notasCredito.$inferSelect;
 export type Cobro = typeof schema.cobros.$inferSelect;
+export type Cotizacion = typeof schema.cotizaciones.$inferSelect;
 
 // Helper: numeric columns come back as strings from pg, convert to number
 function num(v: string | number | null): number {
@@ -74,6 +75,24 @@ function normalizeNotaCredito(row: NotaCredito) {
 
 function normalizeCobro(row: Cobro) {
   return { ...row, id: String(row.id), facturaId: String(row.facturaId), clienteId: String(row.clienteId), monto: num(row.monto) };
+}
+
+function normalizeCotizacion(row: Cotizacion) {
+  return {
+    ...row,
+    id: String(row.id),
+    clienteId: String(row.clienteId),
+    facturaId: row.facturaId ? String(row.facturaId) : null,
+    subtotal: num(row.subtotal),
+    iva: num(row.iva),
+    total: num(row.total),
+    items: (row.items ?? []).map(i => ({
+      ...i,
+      tipo: (i.tipo ?? 'producto') as 'producto' | 'servicio',
+      precioUnitario: num(i.precioUnitario),
+      subtotal: num(i.subtotal),
+    })),
+  };
 }
 
 function normalizeCompra(row: Compra) {
@@ -952,5 +971,93 @@ export const store = {
 
     const rows = await db.update(schema.pedidos).set({ estado: 'despachado' }).where(eq(schema.pedidos.id, Number(id))).returning();
     return rows[0] ? normalizePedido(rows[0]) : null;
+  },
+
+  // --- Cotizaciones ---
+  async getCotizaciones() {
+    const rows = await db.select().from(schema.cotizaciones).orderBy(desc(schema.cotizaciones.id));
+    return rows.map(normalizeCotizacion);
+  },
+
+  async getCotizacion(id: string) {
+    const rows = await db.select().from(schema.cotizaciones).where(eq(schema.cotizaciones.id, Number(id)));
+    return rows[0] ? normalizeCotizacion(rows[0]) : undefined;
+  },
+
+  async getCotizacionesCliente(clienteId: string) {
+    const rows = await db.select().from(schema.cotizaciones)
+      .where(eq(schema.cotizaciones.clienteId, Number(clienteId)))
+      .orderBy(desc(schema.cotizaciones.id));
+    return rows.map(normalizeCotizacion);
+  },
+
+  async createCotizacion(data: {
+    clienteId: string;
+    clienteNombre: string;
+    items: { tipo: 'producto' | 'servicio'; productoId: string; productoNombre: string; cantidad: number; precioUnitario: number; subtotal: number }[];
+    subtotal: number;
+    iva: number;
+    total: number;
+    notas?: string;
+    fechaVencimiento?: string;
+    fecha: string;
+  }) {
+    const countResult = await db.select({ count: sql<number>`count(*)` }).from(schema.cotizaciones);
+    const count = Number(countResult[0].count);
+    const numero = `COT-${String(count + 1).padStart(3, '0')}`;
+
+    const rows = await db.insert(schema.cotizaciones).values({
+      numero,
+      clienteId: Number(data.clienteId),
+      clienteNombre: data.clienteNombre,
+      items: data.items,
+      subtotal: String(data.subtotal),
+      iva: String(data.iva),
+      total: String(data.total),
+      estado: 'borrador',
+      notas: data.notas ?? '',
+      fechaVencimiento: data.fechaVencimiento ?? null,
+      fecha: data.fecha,
+    }).returning();
+    return normalizeCotizacion(rows[0]);
+  },
+
+  async updateCotizacionEstado(id: string, estado: string) {
+    const rows = await db.update(schema.cotizaciones)
+      .set({ estado })
+      .where(eq(schema.cotizaciones.id, Number(id)))
+      .returning();
+    return rows[0] ? normalizeCotizacion(rows[0]) : null;
+  },
+
+  // Convert a cotizacion to a factura (almacen optional, applies inventory rules)
+  async convertirCotizacionAFactura(cotizacionId: string, almacenId?: string) {
+    const cot = await this.getCotizacion(cotizacionId);
+    if (!cot || cot.estado === 'convertida' || cot.estado === 'rechazada') return null;
+
+    let almacenNombre = '';
+    if (almacenId) {
+      const alm = await this.getAlmacen(almacenId);
+      almacenNombre = alm?.nombre ?? '';
+    }
+
+    const factura = await this.createFactura({
+      clienteId: cot.clienteId,
+      clienteNombre: cot.clienteNombre,
+      almacenId: almacenId ?? undefined,
+      almacenNombre: almacenNombre || undefined,
+      items: cot.items,
+      subtotal: cot.subtotal,
+      iva: cot.iva,
+      total: cot.total,
+      estado: 'pendiente',
+      fecha: new Date().toISOString().split('T')[0],
+    });
+
+    await db.update(schema.cotizaciones)
+      .set({ estado: 'convertida', facturaId: Number(factura.id), facturaNumero: factura.numero })
+      .where(eq(schema.cotizaciones.id, Number(cotizacionId)));
+
+    return factura;
   },
 };

@@ -215,3 +215,28 @@ export const notasCredito = pgTable('notas_credito', {
   motivo: text('motivo').notNull().default(''),
   fecha: date('fecha').defaultNow().notNull(),
 });
+
+// --- Cotizaciones (no mueven ni reservan inventario) ---
+export const cotizaciones = pgTable('cotizaciones', {
+  id: serial('id').primaryKey(),
+  numero: varchar('numero', { length: 20 }).notNull().unique(),
+  clienteId: integer('cliente_id').notNull(),
+  clienteNombre: varchar('cliente_nombre', { length: 300 }).notNull(),
+  items: jsonb('items').$type<{
+    tipo: 'producto' | 'servicio';
+    productoId: string;
+    productoNombre: string;
+    cantidad: number;
+    precioUnitario: number;
+    subtotal: number;
+  }[]>().default([]),
+  subtotal: numeric('subtotal', { precision: 12, scale: 2 }).notNull(),
+  iva: numeric('iva', { precision: 12, scale: 2 }).notNull(),
+  total: numeric('total', { precision: 12, scale: 2 }).notNull(),
+  estado: varchar('estado', { length: 20 }).notNull().default('borrador'), // borrador | enviada | aceptada | rechazada | vencida | convertida
+  notas: text('notas').default(''),
+  fechaVencimiento: date('fecha_vencimiento'),
+  fecha: date('fecha').defaultNow().notNull(),
+  facturaId: integer('factura_id'),
+  facturaNumero: varchar('factura_numero', { length: 20 }).default(''),
+});

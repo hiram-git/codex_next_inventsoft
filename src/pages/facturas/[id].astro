@@ -52,6 +52,9 @@ const vencida = factura.fechaVencimiento && factura.fechaVencimiento < today && 
       }]}>{factura.estado}</span>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a href={`/facturas/${id}/imprimir`} target="_blank" class="btn btn-outline">
+        <span class="material-icons-round" style="font-size:18px">print</span> Imprimir
+      </a>
       {factura.estado !== 'cancelada' && factura.estado !== 'pagada' && (
         <a href={`/cobros/nuevo`} class="btn btn-primary">
           <span class="material-icons-round" style="font-size:18px">payments</span> Registrar Cobro

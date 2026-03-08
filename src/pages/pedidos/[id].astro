@@ -78,6 +78,9 @@ const estadoBadge: Record<string, string> = {
           </button>
         </form>
       )}
+      <a href={`/pedidos/${id}/imprimir`} target="_blank" class="btn btn-outline">
+        <span class="material-icons-round" style="font-size:18px">print</span> Imprimir
+      </a>
       <a href="/pedidos" class="btn btn-secondary">
         <span class="material-icons-round">arrow_back</span> Volver
       </a>
@@ -171,5 +174,7 @@ const estadoBadge: Record<string, string> = {
   .total-row + .total-row { border-top: 1px solid var(--border); }
   .total-final { font-size: 1.15rem; font-weight: 700; color: var(--primary); }
   .badge-secondary { background: var(--bg); color: var(--text-muted); }
+  .btn-outline { background: white; border: 1px solid var(--border); color: var(--text); }
+  .btn-outline:hover { background: #f8fafc; }
   @media (max-width: 768px) { .info-grid { grid-template-columns: 1fr 1fr; } }
 </style>

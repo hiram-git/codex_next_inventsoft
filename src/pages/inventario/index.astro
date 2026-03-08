@@ -1,0 +1,113 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { store } from '../../lib/store';
+
+const almacenId = Astro.url.searchParams.get('almacen') ?? '';
+
+const [almacenes, inventarioRows] = await Promise.all([
+  store.getAlmacenes(),
+  store.getInventario(almacenId || undefined),
+]);
+
+const almacenActual = almacenId ? almacenes.find(a => a.id === almacenId) : null;
+
+// Group by almacen for display
+const byAlmacen: Record<string, typeof inventarioRows> = {};
+for (const row of inventarioRows) {
+  const key = row.almacenNombre;
+  if (!byAlmacen[key]) byAlmacen[key] = [];
+  byAlmacen[key].push(row);
+}
+---
+
+<AdminLayout title="Inventario">
+  <div class="page-header">
+    <h1>Inventario{almacenActual ? ` — ${almacenActual.nombre}` : ''}</h1>
+    <a href="/compras/nueva" class="btn btn-primary">
+      <span class="material-icons-round">local_shipping</span> Nueva Compra
+    </a>
+  </div>
+
+  <!-- Filter -->
+  <div class="card" style="margin-bottom:16px;padding:16px">
+    <form method="GET" style="display:flex;gap:12px;align-items:flex-end">
+      <div class="form-group" style="margin-bottom:0;flex:1">
+        <label>Filtrar por almacén</label>
+        <select name="almacen" class="form-control" onchange="this.form.submit()">
+          <option value="">Todos los almacenes</option>
+          {almacenes.map(a => (
+            <option value={a.id} selected={a.id === almacenId}>{a.nombre}</option>
+          ))}
+        </select>
+      </div>
+      {almacenId && (
+        <a href="/inventario" class="btn btn-secondary">
+          <span class="material-icons-round" style="font-size:16px">clear</span> Limpiar
+        </a>
+      )}
+    </form>
+  </div>
+
+  {inventarioRows.length === 0 ? (
+    <div class="card" style="text-align:center;padding:48px;color:var(--text-muted)">
+      <span class="material-icons-round" style="font-size:48px;display:block;margin-bottom:8px">inventory_2</span>
+      <p>No hay movimientos de inventario registrados.</p>
+      <p style="font-size:0.875rem;margin-top:4px">Recibe una compra para comenzar.</p>
+    </div>
+  ) : (
+    Object.entries(byAlmacen).map(([almNombre, rows]) => (
+      <div class="card" style="margin-bottom:16px">
+        <h2 style="font-size:1rem;margin-bottom:16px;display:flex;align-items:center;gap:8px">
+          <span class="material-icons-round" style="font-size:20px;color:var(--primary)">warehouse</span>
+          {almNombre}
+        </h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Producto</th>
+              <th>Stock Total</th>
+              <th>Reservado</th>
+              <th>Disponible</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => {
+              const disponible = r.stock - r.stockReservado;
+              return (
+                <tr>
+                  <td><strong>{r.productoNombre}</strong></td>
+                  <td>
+                    <span class:list={['badge', {
+                      'badge-success': r.stock >= 15,
+                      'badge-warning': r.stock >= 5 && r.stock < 15,
+                      'badge-danger': r.stock < 5,
+                    }]}>{r.stock} uds</span>
+                  </td>
+                  <td>
+                    {r.stockReservado > 0
+                      ? <span class="badge badge-warning">{r.stockReservado} uds</span>
+                      : <span style="color:var(--text-muted)">—</span>
+                    }
+                  </td>
+                  <td>
+                    <span class:list={['badge', {
+                      'badge-success': disponible >= 15,
+                      'badge-warning': disponible >= 5 && disponible < 15,
+                      'badge-danger': disponible < 5,
+                    }]}>{disponible} uds</span>
+                  </td>
+                  <td>
+                    <a href={`/kardex?almacen=${r.almacenId}&producto=${r.productoId}`} class="btn btn-secondary btn-sm" title="Ver kardex">
+                      <span class="material-icons-round" style="font-size:16px">swap_vert</span> Kardex
+                    </a>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    ))
+  )}
+</AdminLayout>

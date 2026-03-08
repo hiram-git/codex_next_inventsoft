@@ -1,0 +1,136 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { store } from '../../lib/store';
+
+let mensaje = '';
+let tipoMensaje = '';
+
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const action = formData.get('_action')?.toString();
+  const id = formData.get('id')?.toString() ?? '';
+
+  if (action === 'confirmar') {
+    const result = await store.confirmarPedido(id);
+    if (result.ok) {
+      mensaje = 'Pedido confirmado. Stock reservado en inventario.';
+      tipoMensaje = 'success';
+    } else {
+      mensaje = result.error ?? 'Error al confirmar el pedido.';
+      tipoMensaje = 'error';
+    }
+  }
+
+  if (action === 'despachar') {
+    const result = await store.despacharPedido(id);
+    if (result) {
+      mensaje = 'Pedido despachado. Inventario actualizado.';
+      tipoMensaje = 'success';
+    } else {
+      mensaje = 'No se pudo despachar el pedido.';
+      tipoMensaje = 'error';
+    }
+  }
+
+  if (action === 'cancelar') {
+    await store.cancelarPedido(id);
+    mensaje = 'Pedido cancelado.';
+    tipoMensaje = 'success';
+  }
+}
+
+const pedidos = await store.getPedidos();
+
+const estadoBadge: Record<string, string> = {
+  borrador: 'badge-secondary',
+  confirmado: 'badge-warning',
+  despachado: 'badge-success',
+  cancelado: 'badge-danger',
+};
+---
+
+<AdminLayout title="Pedidos">
+  <div class="page-header">
+    <h1>Pedidos</h1>
+    <a href="/pedidos/nuevo" class="btn btn-primary">
+      <span class="material-icons-round">add</span> Nuevo Pedido
+    </a>
+  </div>
+
+  {mensaje && <div class={`alert alert-${tipoMensaje}`}>{mensaje}</div>}
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Número</th>
+          <th>Fecha</th>
+          <th>Cliente</th>
+          <th>Almacén</th>
+          <th>Items</th>
+          <th>Total</th>
+          <th>Estado</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {pedidos.map(p => (
+          <tr>
+            <td><strong>{p.numero}</strong></td>
+            <td>{p.fecha}</td>
+            <td>{p.clienteNombre}</td>
+            <td>{p.almacenNombre}</td>
+            <td>{p.items.length} producto(s)</td>
+            <td><strong>${p.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</strong></td>
+            <td>
+              <span class:list={['badge', estadoBadge[p.estado] ?? 'badge-secondary']}>
+                {p.estado}
+              </span>
+            </td>
+            <td>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                <a href={`/pedidos/${p.id}`} class="btn btn-primary btn-sm" title="Ver detalle">
+                  <span class="material-icons-round" style="font-size:16px">visibility</span>
+                </a>
+                {p.estado === 'borrador' && (
+                  <form method="POST" style="display:inline" onsubmit="return confirm('¿Confirmar pedido? Se reservará stock en inventario.')">
+                    <input type="hidden" name="_action" value="confirmar" />
+                    <input type="hidden" name="id" value={p.id} />
+                    <button type="submit" class="btn btn-success btn-sm" title="Confirmar y reservar">
+                      <span class="material-icons-round" style="font-size:16px">check</span>
+                    </button>
+                  </form>
+                )}
+                {p.estado === 'confirmado' && (
+                  <form method="POST" style="display:inline" onsubmit="return confirm('¿Despachar pedido? Se creará la salida en inventario.')">
+                    <input type="hidden" name="_action" value="despachar" />
+                    <input type="hidden" name="id" value={p.id} />
+                    <button type="submit" class="btn btn-primary btn-sm" title="Despachar">
+                      <span class="material-icons-round" style="font-size:16px">local_shipping</span>
+                    </button>
+                  </form>
+                )}
+                {(p.estado === 'borrador' || p.estado === 'confirmado') && (
+                  <form method="POST" style="display:inline" onsubmit="return confirm('¿Cancelar este pedido?')">
+                    <input type="hidden" name="_action" value="cancelar" />
+                    <input type="hidden" name="id" value={p.id} />
+                    <button type="submit" class="btn btn-danger btn-sm" title="Cancelar">
+                      <span class="material-icons-round" style="font-size:16px">cancel</span>
+                    </button>
+                  </form>
+                )}
+              </div>
+            </td>
+          </tr>
+        ))}
+        {pedidos.length === 0 && (
+          <tr><td colspan="8" style="text-align:center;color:var(--text-muted)">No hay pedidos registrados.</td></tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+</AdminLayout>
+
+<style>
+  .badge-secondary { background: var(--bg); color: var(--text-muted); }
+</style>

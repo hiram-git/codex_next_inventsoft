@@ -1,0 +1,175 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { store } from '../../lib/store';
+
+const { id } = Astro.params;
+let mensaje = '';
+let tipoMensaje = '';
+
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const action = formData.get('_action')?.toString();
+
+  if (action === 'confirmar') {
+    const result = await store.confirmarPedido(id ?? '');
+    if (result.ok) {
+      mensaje = 'Pedido confirmado. Stock reservado en inventario.';
+      tipoMensaje = 'success';
+    } else {
+      mensaje = result.error ?? 'Error al confirmar.';
+      tipoMensaje = 'error';
+    }
+  }
+  if (action === 'despachar') {
+    const result = await store.despacharPedido(id ?? '');
+    if (result) {
+      mensaje = 'Pedido despachado. Inventario actualizado.';
+      tipoMensaje = 'success';
+    } else {
+      mensaje = 'No se pudo despachar el pedido.';
+      tipoMensaje = 'error';
+    }
+  }
+  if (action === 'cancelar') {
+    await store.cancelarPedido(id ?? '');
+    return Astro.redirect('/pedidos');
+  }
+}
+
+const pedido = await store.getPedido(id ?? '');
+if (!pedido) return Astro.redirect('/pedidos');
+
+const estadoBadge: Record<string, string> = {
+  borrador: 'badge-secondary',
+  confirmado: 'badge-warning',
+  despachado: 'badge-success',
+  cancelado: 'badge-danger',
+};
+---
+
+<AdminLayout title={`Pedido ${pedido.numero}`}>
+  <div class="page-header">
+    <div style="display:flex;align-items:center;gap:12px">
+      <h1>Pedido {pedido.numero}</h1>
+      <span class:list={['badge', estadoBadge[pedido.estado] ?? 'badge-secondary']}>{pedido.estado}</span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      {pedido.estado === 'borrador' && (
+        <form method="POST" onsubmit="return confirm('¿Confirmar pedido? Se reservará el stock en inventario.')">
+          <input type="hidden" name="_action" value="confirmar" />
+          <button type="submit" class="btn btn-success">
+            <span class="material-icons-round" style="font-size:18px">check</span> Confirmar
+          </button>
+        </form>
+      )}
+      {pedido.estado === 'confirmado' && (
+        <form method="POST" onsubmit="return confirm('¿Despachar pedido? Se registrará la salida del inventario.')">
+          <input type="hidden" name="_action" value="despachar" />
+          <button type="submit" class="btn btn-primary">
+            <span class="material-icons-round" style="font-size:18px">local_shipping</span> Despachar
+          </button>
+        </form>
+      )}
+      {(pedido.estado === 'borrador' || pedido.estado === 'confirmado') && (
+        <form method="POST" onsubmit="return confirm('¿Cancelar este pedido?')">
+          <input type="hidden" name="_action" value="cancelar" />
+          <button type="submit" class="btn btn-danger">
+            <span class="material-icons-round" style="font-size:18px">cancel</span> Cancelar
+          </button>
+        </form>
+      )}
+      <a href="/pedidos" class="btn btn-secondary">
+        <span class="material-icons-round">arrow_back</span> Volver
+      </a>
+    </div>
+  </div>
+
+  {mensaje && <div class={`alert alert-${tipoMensaje}`}>{mensaje}</div>}
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="info-grid">
+      <div>
+        <h3 class="info-label">Cliente</h3>
+        <p class="info-value">{pedido.clienteNombre}</p>
+      </div>
+      <div>
+        <h3 class="info-label">Almacén</h3>
+        <p class="info-value">{pedido.almacenNombre}</p>
+      </div>
+      <div>
+        <h3 class="info-label">Fecha</h3>
+        <p class="info-value">{pedido.fecha}</p>
+      </div>
+      <div>
+        <h3 class="info-label">Estado</h3>
+        <span class:list={['badge', estadoBadge[pedido.estado] ?? 'badge-secondary']}>{pedido.estado}</span>
+      </div>
+    </div>
+    {pedido.notas && (
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+        <h3 class="info-label">Notas</h3>
+        <p style="font-size:0.9rem">{pedido.notas}</p>
+      </div>
+    )}
+  </div>
+
+  {pedido.estado === 'confirmado' && (
+    <div class="alert" style="background:#fef3c7;color:#b45309;border:1px solid #fde68a;margin-bottom:16px">
+      <span class="material-icons-round" style="font-size:16px;vertical-align:middle">info</span>
+      Stock reservado en almacén <strong>{pedido.almacenNombre}</strong>. Al despachar se registrará la salida definitiva.
+    </div>
+  )}
+
+  <div class="card" style="margin-bottom:16px">
+    <h2 style="font-size:1.1rem;margin-bottom:16px">Productos</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Producto</th>
+          <th>P. Unitario</th>
+          <th>Cantidad</th>
+          <th>Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        {pedido.items.map(item => (
+          <tr>
+            <td>{item.productoNombre}</td>
+            <td>${item.precioUnitario.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td>{item.cantidad}</td>
+            <td><strong>${item.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</strong></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="totals">
+      <div class="total-row">
+        <span>Subtotal:</span>
+        <span>${pedido.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+      </div>
+      <div class="total-row">
+        <span>IVA (16%):</span>
+        <span>${pedido.iva.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+      </div>
+      <div class="total-row total-final">
+        <span>Total:</span>
+        <span>${pedido.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+      </div>
+    </div>
+  </div>
+</AdminLayout>
+
+<style>
+  .info-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+  .info-label { font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; margin-bottom: 4px; }
+  .info-value { font-weight: 600; }
+  .totals { max-width: 300px; margin-left: auto; }
+  .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 0.95rem; }
+  .total-row + .total-row { border-top: 1px solid var(--border); }
+  .total-final { font-size: 1.15rem; font-weight: 700; color: var(--primary); }
+  .badge-secondary { background: var(--bg); color: var(--text-muted); }
+  @media (max-width: 768px) { .info-grid { grid-template-columns: 1fr 1fr; } }
+</style>

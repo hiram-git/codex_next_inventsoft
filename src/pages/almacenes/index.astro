@@ -1,0 +1,179 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { store } from '../../lib/store';
+
+let mensaje = '';
+let tipoMensaje = '';
+
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const action = formData.get('_action')?.toString();
+
+  if (action === 'create' || action === 'update') {
+    const data = {
+      nombre: formData.get('nombre')?.toString() ?? '',
+      descripcion: formData.get('descripcion')?.toString() ?? '',
+      ubicacion: formData.get('ubicacion')?.toString() ?? '',
+      activo: formData.get('activo') === 'on',
+    };
+
+    if (action === 'create') {
+      await store.createAlmacen(data);
+      mensaje = 'Almacén creado exitosamente.';
+    } else {
+      const id = formData.get('id')?.toString() ?? '';
+      await store.updateAlmacen(id, data);
+      mensaje = 'Almacén actualizado.';
+    }
+    tipoMensaje = 'success';
+  }
+
+  if (action === 'delete') {
+    const id = formData.get('id')?.toString() ?? '';
+    await store.deleteAlmacen(id);
+    mensaje = 'Almacén eliminado.';
+    tipoMensaje = 'success';
+  }
+}
+
+const almacenes = await store.getAlmacenes();
+---
+
+<AdminLayout title="Almacenes">
+  <div class="page-header">
+    <h1>Almacenes</h1>
+    <button class="btn btn-primary" onclick="document.getElementById('modalCrear').style.display='flex'">
+      <span class="material-icons-round">add</span> Nuevo Almacén
+    </button>
+  </div>
+
+  {mensaje && <div class={`alert alert-${tipoMensaje}`}>{mensaje}</div>}
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Descripción</th>
+          <th>Ubicación</th>
+          <th>Estado</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {almacenes.map(a => (
+          <tr>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="material-icons-round" style="color:var(--primary);font-size:20px">warehouse</span>
+                <strong>{a.nombre}</strong>
+              </div>
+            </td>
+            <td style="color:var(--text-muted)">{a.descripcion || '—'}</td>
+            <td>{a.ubicacion || '—'}</td>
+            <td>
+              <span class:list={['badge', a.activo ? 'badge-success' : 'badge-danger']}>
+                {a.activo ? 'Activo' : 'Inactivo'}
+              </span>
+            </td>
+            <td>
+              <div style="display:flex;gap:4px;">
+                <a href={`/inventario?almacen=${a.id}`} class="btn btn-secondary btn-sm" title="Ver inventario">
+                  <span class="material-icons-round" style="font-size:16px">view_list</span>
+                </a>
+                <button class="btn btn-primary btn-sm"
+                  onclick={`openEdit('${a.id}','${a.nombre}','${a.descripcion}','${a.ubicacion}',${a.activo})`}>
+                  <span class="material-icons-round" style="font-size:16px">edit</span>
+                </button>
+                <form method="POST" style="display:inline" onsubmit="return confirm('¿Eliminar este almacén?')">
+                  <input type="hidden" name="_action" value="delete" />
+                  <input type="hidden" name="id" value={a.id} />
+                  <button type="submit" class="btn btn-danger btn-sm">
+                    <span class="material-icons-round" style="font-size:16px">delete</span>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        ))}
+        {almacenes.length === 0 && (
+          <tr><td colspan="5" style="text-align:center;color:var(--text-muted)">No hay almacenes registrados.</td></tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Modal Crear -->
+  <div class="modal-overlay" id="modalCrear" style="display:none">
+    <div class="modal">
+      <h2>Nuevo Almacén</h2>
+      <form method="POST">
+        <input type="hidden" name="_action" value="create" />
+        <div class="form-group">
+          <label>Nombre</label>
+          <input type="text" name="nombre" class="form-control" required />
+        </div>
+        <div class="form-group">
+          <label>Descripción</label>
+          <textarea name="descripcion" class="form-control" rows="2"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Ubicación</label>
+          <input type="text" name="ubicacion" class="form-control" />
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" name="activo" checked /> Activo
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalCrear').style.display='none'">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Crear</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Editar -->
+  <div class="modal-overlay" id="modalEditar" style="display:none">
+    <div class="modal">
+      <h2>Editar Almacén</h2>
+      <form method="POST">
+        <input type="hidden" name="_action" value="update" />
+        <input type="hidden" name="id" id="editId" />
+        <div class="form-group">
+          <label>Nombre</label>
+          <input type="text" name="nombre" id="editNombre" class="form-control" required />
+        </div>
+        <div class="form-group">
+          <label>Descripción</label>
+          <textarea name="descripcion" id="editDescripcion" class="form-control" rows="2"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Ubicación</label>
+          <input type="text" name="ubicacion" id="editUbicacion" class="form-control" />
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" name="activo" id="editActivo" /> Activo
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalEditar').style.display='none'">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</AdminLayout>
+
+<script is:inline>
+  function openEdit(id, nombre, descripcion, ubicacion, activo) {
+    document.getElementById('editId').value = id;
+    document.getElementById('editNombre').value = nombre;
+    document.getElementById('editDescripcion').value = descripcion;
+    document.getElementById('editUbicacion').value = ubicacion;
+    document.getElementById('editActivo').checked = activo;
+    document.getElementById('modalEditar').style.display = 'flex';
+  }
+</script>

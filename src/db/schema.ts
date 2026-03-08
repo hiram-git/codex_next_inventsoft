@@ -54,6 +54,8 @@ export const facturas = pgTable('facturas', {
   numero: varchar('numero', { length: 20 }).notNull().unique(),
   clienteId: integer('cliente_id').notNull(),
   clienteNombre: varchar('cliente_nombre', { length: 300 }).notNull(),
+  almacenId: integer('almacen_id'),
+  almacenNombre: varchar('almacen_nombre', { length: 200 }).default(''),
   items: jsonb('items').$type<{
     productoId: string;
     productoNombre: string;
@@ -77,4 +79,86 @@ export const empresa = pgTable('empresa', {
   telefono: varchar('telefono', { length: 50 }).default(''),
   email: varchar('email', { length: 200 }).default(''),
   logo: text('logo').default(''),
+});
+
+// --- Almacenes ---
+export const almacenes = pgTable('almacenes', {
+  id: serial('id').primaryKey(),
+  nombre: varchar('nombre', { length: 200 }).notNull(),
+  descripcion: text('descripcion').default(''),
+  ubicacion: varchar('ubicacion', { length: 300 }).default(''),
+  activo: boolean('activo').default(true).notNull(),
+});
+
+// --- Inventario (stock por almacén × producto) ---
+export const inventario = pgTable('inventario', {
+  id: serial('id').primaryKey(),
+  almacenId: integer('almacen_id').notNull(),
+  almacenNombre: varchar('almacen_nombre', { length: 200 }).notNull(),
+  productoId: integer('producto_id').notNull(),
+  productoNombre: varchar('producto_nombre', { length: 300 }).notNull(),
+  stock: integer('stock').default(0).notNull(),
+  stockReservado: integer('stock_reservado').default(0).notNull(),
+});
+
+// --- Kardex (movimientos de inventario) ---
+export const kardex = pgTable('kardex', {
+  id: serial('id').primaryKey(),
+  almacenId: integer('almacen_id').notNull(),
+  almacenNombre: varchar('almacen_nombre', { length: 200 }).notNull(),
+  productoId: integer('producto_id').notNull(),
+  productoNombre: varchar('producto_nombre', { length: 300 }).notNull(),
+  tipo: varchar('tipo', { length: 20 }).notNull(), // 'entrada' | 'salida' | 'reserva' | 'liberacion'
+  cantidad: integer('cantidad').notNull(),
+  stockAnterior: integer('stock_anterior').notNull(),
+  stockNuevo: integer('stock_nuevo').notNull(),
+  referencia: varchar('referencia', { length: 20 }).notNull(), // 'compra' | 'factura' | 'pedido' | 'ajuste'
+  referenciaId: integer('referencia_id'),
+  referenciaNumero: varchar('referencia_numero', { length: 30 }).default(''),
+  notas: text('notas').default(''),
+  fecha: date('fecha').defaultNow().notNull(),
+});
+
+// --- Compras (ingresos de mercancía) ---
+export const compras = pgTable('compras', {
+  id: serial('id').primaryKey(),
+  numero: varchar('numero', { length: 20 }).notNull().unique(),
+  proveedorNombre: varchar('proveedor_nombre', { length: 300 }).notNull(),
+  almacenId: integer('almacen_id').notNull(),
+  almacenNombre: varchar('almacen_nombre', { length: 200 }).notNull(),
+  items: jsonb('items').$type<{
+    productoId: string;
+    productoNombre: string;
+    cantidad: number;
+    precioUnitario: number;
+    subtotal: number;
+  }[]>().default([]),
+  subtotal: numeric('subtotal', { precision: 12, scale: 2 }).notNull(),
+  iva: numeric('iva', { precision: 12, scale: 2 }).notNull(),
+  total: numeric('total', { precision: 12, scale: 2 }).notNull(),
+  estado: varchar('estado', { length: 20 }).notNull().default('borrador'),
+  fecha: date('fecha').defaultNow().notNull(),
+});
+
+// --- Pedidos (reservas de inventario) ---
+export const pedidos = pgTable('pedidos', {
+  id: serial('id').primaryKey(),
+  numero: varchar('numero', { length: 20 }).notNull().unique(),
+  clienteId: integer('cliente_id').notNull(),
+  clienteNombre: varchar('cliente_nombre', { length: 300 }).notNull(),
+  almacenId: integer('almacen_id').notNull(),
+  almacenNombre: varchar('almacen_nombre', { length: 200 }).notNull(),
+  items: jsonb('items').$type<{
+    productoId: string;
+    productoNombre: string;
+    cantidad: number;
+    precioUnitario: number;
+    subtotal: number;
+  }[]>().default([]),
+  subtotal: numeric('subtotal', { precision: 12, scale: 2 }).notNull(),
+  iva: numeric('iva', { precision: 12, scale: 2 }).notNull(),
+  total: numeric('total', { precision: 12, scale: 2 }).notNull(),
+  estado: varchar('estado', { length: 20 }).notNull().default('borrador'),
+  notas: text('notas').default(''),
+  fecha: date('fecha').defaultNow().notNull(),
 });

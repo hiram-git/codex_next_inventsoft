@@ -3,48 +3,135 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 import { store } from '../../lib/store';
 
 const { id } = Astro.params;
-const factura = await store.getFactura(id ?? '');
+let mensaje = '';
+let tipoMensaje = '';
 
-if (!factura) {
-  return Astro.redirect('/facturas');
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const action = formData.get('_action')?.toString();
+
+  if (action === 'nota_credito') {
+    const motivo = formData.get('motivo')?.toString() ?? '';
+    const nota = await store.createNotaCredito(id ?? '', motivo);
+    if (nota) {
+      return Astro.redirect(`/notas-credito/${nota.id}`);
+    } else {
+      mensaje = 'No se pudo generar la nota de crédito. La factura ya puede estar cancelada.';
+      tipoMensaje = 'error';
+    }
+  }
 }
+
+const factura = await store.getFactura(id ?? '');
+if (!factura) return Astro.redirect('/facturas');
+
+const notaCredito = await store.getNotaCreditoByFactura(id ?? '');
+const cobros = await store.getCobros(id ?? '');
+const saldoInfo = await store.getSaldoFactura(id ?? '');
+
+const cobrosAplicados = cobros.filter(c => c.estado === 'aplicado');
+const metodoPagoLabel: Record<string, string> = {
+  efectivo: 'Efectivo',
+  transferencia: 'Transferencia',
+  cheque: 'Cheque',
+  tarjeta: 'Tarjeta',
+};
+
+const today = new Date().toISOString().split('T')[0];
+const vencida = factura.fechaVencimiento && factura.fechaVencimiento < today && factura.estado !== 'pagada' && factura.estado !== 'cancelada';
 ---
 
 <AdminLayout title={`Factura ${factura.numero}`}>
   <div class="page-header">
-    <h1>Factura {factura.numero}</h1>
-    <a href="/facturas" class="btn btn-secondary">
-      <span class="material-icons-round">arrow_back</span> Volver
-    </a>
-  </div>
-
-  <div class="card" style="margin-bottom:16px">
-    <div class="factura-info">
-      <div>
-        <h3 style="color:var(--text-muted);font-size:0.8rem;text-transform:uppercase">Cliente</h3>
-        <p style="font-weight:600">{factura.clienteNombre}</p>
-      </div>
-      <div>
-        <h3 style="color:var(--text-muted);font-size:0.8rem;text-transform:uppercase">Fecha</h3>
-        <p style="font-weight:600">{factura.fecha}</p>
-      </div>
-      <div>
-        <h3 style="color:var(--text-muted);font-size:0.8rem;text-transform:uppercase">Estado</h3>
-        <span class:list={['badge', {
-          'badge-success': factura.estado === 'pagada',
-          'badge-warning': factura.estado === 'pendiente',
-          'badge-danger': factura.estado === 'cancelada',
-        }]}>{factura.estado}</span>
-      </div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <h1>Factura {factura.numero}</h1>
+      <span class:list={['badge', {
+        'badge-success': factura.estado === 'pagada',
+        'badge-warning': factura.estado === 'pendiente' || factura.estado === 'parcial',
+        'badge-danger': factura.estado === 'cancelada' || factura.estado === 'vencida',
+      }]}>{factura.estado}</span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      {factura.estado !== 'cancelada' && factura.estado !== 'pagada' && (
+        <a href={`/cobros/nuevo`} class="btn btn-primary">
+          <span class="material-icons-round" style="font-size:18px">payments</span> Registrar Cobro
+        </a>
+      )}
+      {factura.estado !== 'cancelada' && !notaCredito && (
+        <button class="btn btn-danger" onclick="document.getElementById('modalNC').style.display='flex'">
+          <span class="material-icons-round" style="font-size:18px">undo</span> Nota de Crédito
+        </button>
+      )}
+      {notaCredito && (
+        <a href={`/notas-credito/${notaCredito.id}`} class="btn btn-secondary">
+          <span class="material-icons-round" style="font-size:18px">description</span> Ver NC {notaCredito.numero}
+        </a>
+      )}
+      <a href="/facturas" class="btn btn-secondary">
+        <span class="material-icons-round">arrow_back</span> Volver
+      </a>
     </div>
   </div>
 
+  {mensaje && <div class={`alert alert-${tipoMensaje}`}>{mensaje}</div>}
+
+  {factura.estado === 'cancelada' && notaCredito && (
+    <div class="alert" style="background:#fef2f2;color:var(--danger);border:1px solid #fca5a5;margin-bottom:16px;font-size:0.875rem">
+      <span class="material-icons-round" style="font-size:16px;vertical-align:middle">info</span>
+      Esta factura fue anulada mediante la nota de crédito
+      <a href={`/notas-credito/${notaCredito.id}`} style="color:var(--danger);font-weight:600;margin-left:4px">{notaCredito.numero}</a>.
+    </div>
+  )}
+
+  {vencida && (
+    <div class="alert" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;margin-bottom:16px;font-size:0.875rem">
+      <span class="material-icons-round" style="font-size:16px;vertical-align:middle">warning</span>
+      Factura vencida desde <strong>{factura.fechaVencimiento}</strong>. Saldo pendiente: <strong>${saldoInfo?.saldo.toFixed(2)}</strong>
+    </div>
+  )}
+
+  <!-- Info grid -->
   <div class="card" style="margin-bottom:16px">
-    <h2 style="font-size:1.1rem;margin-bottom:16px">Detalle de Productos</h2>
+    <div class="factura-info">
+      <div>
+        <h3 class="info-label">Cliente</h3>
+        <p style="font-weight:600">{factura.clienteNombre}</p>
+      </div>
+      <div>
+        <h3 class="info-label">Fecha</h3>
+        <p style="font-weight:600">{factura.fecha}</p>
+      </div>
+      <div>
+        <h3 class="info-label">Vencimiento</h3>
+        <p style="font-weight:600" class:list={[{ 'text-danger': !!vencida }]}>
+          {factura.fechaVencimiento ?? '—'}
+        </p>
+      </div>
+      <div>
+        <h3 class="info-label">Estado</h3>
+        <span class:list={['badge', {
+          'badge-success': factura.estado === 'pagada',
+          'badge-warning': factura.estado === 'pendiente' || factura.estado === 'parcial',
+          'badge-danger': factura.estado === 'cancelada' || factura.estado === 'vencida',
+        }]}>{factura.estado}</span>
+      </div>
+      {factura.almacenNombre && (
+        <div>
+          <h3 class="info-label">Almacén</h3>
+          <p style="font-weight:600">{factura.almacenNombre}</p>
+        </div>
+      )}
+    </div>
+  </div>
+
+  <!-- Items table -->
+  <div class="card" style="margin-bottom:16px">
+    <h2 style="font-size:1.1rem;margin-bottom:16px">Detalle</h2>
     <table>
       <thead>
         <tr>
-          <th>Producto</th>
+          <th>Descripción</th>
+          <th>Tipo</th>
           <th>P. Unitario</th>
           <th>Cantidad</th>
           <th>Subtotal</th>
@@ -54,6 +141,12 @@ if (!factura) {
         {factura.items.map(item => (
           <tr>
             <td>{item.productoNombre}</td>
+            <td>
+              {item.tipo === 'servicio'
+                ? <span class="badge badge-secondary">Servicio</span>
+                : <span class="badge badge-success">Producto</span>
+              }
+            </td>
             <td>${item.precioUnitario.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
             <td>{item.cantidad}</td>
             <td><strong>${item.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</strong></td>
@@ -63,50 +156,151 @@ if (!factura) {
     </table>
   </div>
 
-  <div class="card">
-    <div class="totals">
-      <div class="total-row">
-        <span>Subtotal:</span>
-        <span>${factura.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+  <div class="bottom-grid">
+    <!-- Cobros -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h2 style="font-size:1.1rem;margin:0">Cobros Aplicados</h2>
+        {factura.estado !== 'cancelada' && factura.estado !== 'pagada' && (
+          <a href="/cobros/nuevo" class="btn btn-sm btn-primary">
+            <span class="material-icons-round" style="font-size:16px">add</span> Nuevo Cobro
+          </a>
+        )}
       </div>
-      <div class="total-row">
-        <span>IVA (16%):</span>
-        <span>${factura.iva.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+      {cobros.length === 0 ? (
+        <p style="color:var(--text-muted);font-size:0.875rem">Sin cobros registrados</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Nro.</th>
+              <th>Fecha</th>
+              <th>Método</th>
+              <th>Monto</th>
+              <th>Estado</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {cobros.map(c => (
+              <tr>
+                <td>{c.numero}</td>
+                <td>{c.fecha}</td>
+                <td>{metodoPagoLabel[c.metodoPago] ?? c.metodoPago}</td>
+                <td><strong>${c.monto.toFixed(2)}</strong></td>
+                <td>
+                  <span class:list={['badge', c.estado === 'aplicado' ? 'badge-success' : 'badge-danger']}>
+                    {c.estado === 'aplicado' ? 'Aplicado' : 'Anulado'}
+                  </span>
+                </td>
+                <td><a href={`/cobros/${c.id}`} class="link">Ver</a></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+
+    <!-- Totals + Saldo -->
+    <div>
+      <div class="card">
+        <div class="totals">
+          <div class="total-row">
+            <span>Subtotal:</span>
+            <span>${factura.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div class="total-row">
+            <span>IVA (16%):</span>
+            <span>${factura.iva.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div class="total-row total-final">
+            <span>Total:</span>
+            <span>${factura.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+          </div>
+          {saldoInfo && saldoInfo.cobrado > 0 && (
+            <>
+              <div class="total-row" style="color:#16a34a">
+                <span>Cobrado:</span>
+                <span>- ${saldoInfo.cobrado.toFixed(2)}</span>
+              </div>
+              <div class="total-row" style={saldoInfo.saldo === 0 ? 'color:#16a34a;font-weight:700' : 'color:var(--danger);font-weight:700'}>
+                <span>Saldo Pendiente:</span>
+                <span>${saldoInfo.saldo.toFixed(2)}</span>
+              </div>
+            </>
+          )}
+        </div>
       </div>
-      <div class="total-row total-final">
-        <span>Total:</span>
-        <span>${factura.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
-      </div>
+    </div>
+  </div>
+
+  <!-- Modal Nota de Crédito -->
+  <div class="modal-overlay" id="modalNC" style="display:none">
+    <div class="modal">
+      <h2 style="color:var(--danger)">Generar Nota de Crédito</h2>
+      <p style="font-size:0.9rem;color:var(--text-muted);margin-bottom:16px">
+        Se anulará la factura <strong>{factura.numero}</strong> y
+        {factura.almacenNombre
+          ? ` se devolverán los productos al almacén "${factura.almacenNombre}".`
+          : ' no se afectará el inventario.'}
+      </p>
+      <form method="POST">
+        <input type="hidden" name="_action" value="nota_credito" />
+        <div class="form-group">
+          <label>Motivo de la anulación</label>
+          <textarea name="motivo" class="form-control" rows="3" required
+            placeholder="Ej: Producto defectuoso, error en la facturación, devolución del cliente..."></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalNC').style.display='none'">Cancelar</button>
+          <button type="submit" class="btn btn-danger">Generar Nota de Crédito</button>
+        </div>
+      </form>
     </div>
   </div>
 </AdminLayout>
 
 <style>
-  .factura-info {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 24px;
-  }
-
-  .totals {
-    max-width: 300px;
-    margin-left: auto;
-  }
-
-  .total-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 8px 0;
-    font-size: 0.95rem;
-  }
-
-  .total-row + .total-row {
-    border-top: 1px solid var(--border);
-  }
-
-  .total-final {
-    font-size: 1.15rem;
-    font-weight: 700;
-    color: var(--primary);
+  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 12px; }
+  h1 { font-size: 1.5rem; font-weight: 700; margin: 0; }
+  .text-danger { color: var(--danger); }
+  .alert { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-radius: var(--radius); margin-bottom: 16px; }
+  .card { background: white; border-radius: var(--radius); border: 1px solid var(--border); padding: 24px; }
+  .factura-info { display: grid; grid-template-columns: repeat(5, 1fr); gap: 24px; }
+  .info-label { font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; margin-bottom: 4px; }
+  .bottom-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #f8fafc; padding: 8px 12px; text-align: left; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 0.875rem; }
+  tr:last-child td { border-bottom: none; }
+  .totals { }
+  .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 0.95rem; }
+  .total-row + .total-row { border-top: 1px solid var(--border); }
+  .total-final { font-size: 1.15rem; font-weight: 700; color: var(--primary); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+  .badge-success { background: #dcfce7; color: #16a34a; }
+  .badge-warning { background: #fef9c3; color: #ca8a04; }
+  .badge-danger { background: #fee2e2; color: #dc2626; }
+  .badge-secondary { background: var(--bg); color: var(--text-muted); }
+  .link { color: var(--primary); text-decoration: none; }
+  .link:hover { text-decoration: underline; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius); font-size: 0.875rem; font-weight: 500; border: 1px solid transparent; cursor: pointer; text-decoration: none; transition: all 0.2s; }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-secondary { background: white; border-color: var(--border); color: var(--text); }
+  .btn-secondary:hover { background: #f8fafc; }
+  .btn-danger { background: var(--danger); color: white; }
+  .btn-danger:hover { background: #b91c1c; }
+  .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: none; align-items: center; justify-content: center; z-index: 999; }
+  .modal { background: white; border-radius: var(--radius); padding: 28px; max-width: 480px; width: 90%; box-shadow: 0 10px 40px rgba(0,0,0,.2); }
+  .modal h2 { margin: 0 0 12px; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-weight: 500; font-size: 0.875rem; margin-bottom: 6px; }
+  .form-control { width: 100%; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; font-size: 0.875rem; box-sizing: border-box; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 8px; }
+  @media (max-width: 900px) {
+    .factura-info { grid-template-columns: 1fr 1fr; }
+    .bottom-grid { grid-template-columns: 1fr; }
   }
 </style>

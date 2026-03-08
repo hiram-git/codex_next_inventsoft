@@ -1,0 +1,125 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { store } from '../../lib/store';
+
+const { id } = Astro.params;
+const nota = await store.getNotaCredito(id ?? '');
+if (!nota) return Astro.redirect('/notas-credito');
+---
+
+<AdminLayout title={`Nota de Crédito ${nota.numero}`}>
+  <div class="page-header">
+    <div style="display:flex;align-items:center;gap:12px">
+      <h1>Nota de Crédito {nota.numero}</h1>
+      <span class="badge badge-danger">Anulación</span>
+    </div>
+    <div style="display:flex;gap:8px">
+      <a href={`/facturas/${nota.facturaId}`} class="btn btn-secondary">
+        <span class="material-icons-round">receipt</span> Ver Factura {nota.facturaNumero}
+      </a>
+      <a href="/notas-credito" class="btn btn-secondary">
+        <span class="material-icons-round">arrow_back</span> Volver
+      </a>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="info-grid">
+      <div>
+        <h3 class="info-label">Número</h3>
+        <p class="info-value">{nota.numero}</p>
+      </div>
+      <div>
+        <h3 class="info-label">Factura anulada</h3>
+        <p class="info-value">{nota.facturaNumero}</p>
+      </div>
+      <div>
+        <h3 class="info-label">Cliente</h3>
+        <p class="info-value">{nota.clienteNombre}</p>
+      </div>
+      <div>
+        <h3 class="info-label">Fecha</h3>
+        <p class="info-value">{nota.fecha}</p>
+      </div>
+    </div>
+    {nota.almacenNombre && (
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+        <h3 class="info-label">Almacén (devolución de inventario)</h3>
+        <p class="info-value">{nota.almacenNombre}</p>
+      </div>
+    )}
+    {nota.motivo && (
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+        <h3 class="info-label">Motivo</h3>
+        <p style="font-size:0.95rem">{nota.motivo}</p>
+      </div>
+    )}
+  </div>
+
+  {nota.almacenNombre && (
+    <div class="alert" style="background:#dcfce7;color:var(--success);border:1px solid #86efac;margin-bottom:16px;font-size:0.875rem">
+      <span class="material-icons-round" style="font-size:16px;vertical-align:middle">check_circle</span>
+      Los productos de esta nota de crédito fueron <strong>devueltos al inventario</strong> del almacén <strong>{nota.almacenNombre}</strong>.
+    </div>
+  )}
+
+  <div class="card" style="margin-bottom:16px">
+    <h2 style="font-size:1.1rem;margin-bottom:16px">Detalle de Items</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Descripción</th>
+          <th>Tipo</th>
+          <th>P. Unitario</th>
+          <th>Cantidad</th>
+          <th>Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        {nota.items.map(item => (
+          <tr>
+            <td>{item.productoNombre}</td>
+            <td>
+              {item.tipo === 'servicio'
+                ? <span class="badge badge-secondary">Servicio</span>
+                : <span class="badge badge-success">Producto</span>
+              }
+            </td>
+            <td>${item.precioUnitario.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+            <td>{item.cantidad}</td>
+            <td><strong>${item.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</strong></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="totals">
+      <div class="total-row">
+        <span>Subtotal:</span>
+        <span>${nota.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+      </div>
+      <div class="total-row">
+        <span>IVA (16%):</span>
+        <span>${nota.iva.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+      </div>
+      <div class="total-row total-final">
+        <span>Total acreditado:</span>
+        <span>${nota.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+      </div>
+    </div>
+  </div>
+</AdminLayout>
+
+<style>
+  .info-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+  .info-label { font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; margin-bottom: 4px; }
+  .info-value { font-weight: 600; }
+  .totals { max-width: 300px; margin-left: auto; }
+  .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 0.95rem; }
+  .total-row + .total-row { border-top: 1px solid var(--border); }
+  .total-final { font-size: 1.15rem; font-weight: 700; color: var(--primary); }
+  .badge-secondary { background: var(--bg); color: var(--text-muted); }
+  @media (max-width: 768px) { .info-grid { grid-template-columns: 1fr 1fr; } }
+</style>

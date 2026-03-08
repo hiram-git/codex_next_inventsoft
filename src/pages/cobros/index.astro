@@ -1,0 +1,108 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { store } from '../../lib/store';
+
+const cobros = await store.getCobros();
+
+const metodoPagoLabel: Record<string, string> = {
+  efectivo: 'Efectivo',
+  transferencia: 'Transferencia',
+  cheque: 'Cheque',
+  tarjeta: 'Tarjeta',
+};
+---
+
+<AdminLayout title="Cobros">
+  <div class="page-header">
+    <div>
+      <h1>Cobros</h1>
+      <p class="text-muted">Historial de pagos recibidos de clientes</p>
+    </div>
+    <a href="/cobros/nuevo" class="btn btn-primary">
+      <span class="material-icons-round">add</span>
+      Registrar Cobro
+    </a>
+  </div>
+
+  <div class="card">
+    {cobros.length === 0 ? (
+      <div class="empty-state">
+        <span class="material-icons-round">payments</span>
+        <p>No hay cobros registrados</p>
+        <a href="/cobros/nuevo" class="btn btn-primary">Registrar primer cobro</a>
+      </div>
+    ) : (
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Número</th>
+              <th>Fecha</th>
+              <th>Cliente</th>
+              <th>Factura</th>
+              <th>Método</th>
+              <th>Referencia</th>
+              <th>Monto</th>
+              <th>Estado</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {cobros.map(c => (
+              <tr>
+                <td><strong>{c.numero}</strong></td>
+                <td>{c.fecha}</td>
+                <td>{c.clienteNombre}</td>
+                <td>
+                  <a href={`/facturas/${c.facturaId}`} class="link">{c.facturaNumero}</a>
+                </td>
+                <td>{metodoPagoLabel[c.metodoPago] ?? c.metodoPago}</td>
+                <td class="text-muted">{c.referencia || '—'}</td>
+                <td><strong>${c.monto.toFixed(2)}</strong></td>
+                <td>
+                  <span class:list={['badge', c.estado === 'aplicado' ? 'badge-success' : 'badge-danger']}>
+                    {c.estado === 'aplicado' ? 'Aplicado' : 'Anulado'}
+                  </span>
+                </td>
+                <td>
+                  <a href={`/cobros/${c.id}`} class="btn btn-sm btn-outline">Ver</a>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+  </div>
+</AdminLayout>
+
+<style>
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+  }
+  h1 { font-size: 1.5rem; font-weight: 700; margin: 0; }
+  .text-muted { color: var(--text-muted); font-size: 0.875rem; margin: 4px 0 0; }
+  .card { background: white; border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; }
+  .table-wrapper { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #f8fafc; padding: 10px 16px; text-align: left; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+  td { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 0.875rem; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+  .badge-success { background: #dcfce7; color: #16a34a; }
+  .badge-danger { background: #fee2e2; color: #dc2626; }
+  .link { color: var(--primary); text-decoration: none; }
+  .link:hover { text-decoration: underline; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius); font-size: 0.875rem; font-weight: 500; border: none; cursor: pointer; text-decoration: none; transition: all 0.2s; }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-outline { background: white; border: 1px solid var(--border); color: var(--text); }
+  .btn-outline:hover { background: #f8fafc; }
+  .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+  .empty-state { text-align: center; padding: 60px 24px; color: var(--text-muted); }
+  .empty-state .material-icons-round { font-size: 48px; margin-bottom: 12px; opacity: 0.4; }
+  .empty-state p { margin-bottom: 16px; }
+</style>

@@ -1,0 +1,193 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { store } from '../../lib/store';
+
+let error = '';
+let success = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const facturaId = form.get('facturaId')?.toString() ?? '';
+  const monto = parseFloat(form.get('monto')?.toString() ?? '0');
+  const metodoPago = form.get('metodoPago')?.toString() ?? 'efectivo';
+  const referencia = form.get('referencia')?.toString() ?? '';
+  const notas = form.get('notas')?.toString() ?? '';
+  const fecha = form.get('fecha')?.toString() ?? new Date().toISOString().split('T')[0];
+
+  const result = await store.createCobro({ facturaId, monto, metodoPago, referencia, notas, fecha });
+  if (result.ok) {
+    return Astro.redirect(`/cobros/${result.cobro!.id}`);
+  } else {
+    error = result.error ?? 'Error al registrar cobro';
+  }
+}
+
+// Load pending facturas (not pagada/cancelada) with their saldo
+const cxc = await store.getCuentasPorCobrar();
+const facturasPendientes = cxc.filter(f => f.saldo > 0);
+
+const today = new Date().toISOString().split('T')[0];
+---
+
+<AdminLayout title="Registrar Cobro">
+  <div class="page-header">
+    <div>
+      <h1>Registrar Cobro</h1>
+      <p class="text-muted">Aplica un pago a una factura pendiente</p>
+    </div>
+    <a href="/cobros" class="btn btn-outline">
+      <span class="material-icons-round">arrow_back</span>
+      Volver
+    </a>
+  </div>
+
+  {error && (
+    <div class="alert alert-danger">
+      <span class="material-icons-round">error</span>
+      {error}
+    </div>
+  )}
+
+  {facturasPendientes.length === 0 ? (
+    <div class="card">
+      <div class="empty-state">
+        <span class="material-icons-round">check_circle</span>
+        <p>No hay facturas pendientes de cobro</p>
+        <a href="/facturas" class="btn btn-primary">Ver Facturas</a>
+      </div>
+    </div>
+  ) : (
+    <div class="card">
+      <form method="POST">
+        <div class="form-grid">
+          <div class="form-group full-width">
+            <label for="facturaId">Factura *</label>
+            <select id="facturaId" name="facturaId" required onchange="onFacturaChange(this)">
+              <option value="">— Selecciona una factura —</option>
+              {facturasPendientes.map(f => (
+                <option
+                  value={f.id}
+                  data-saldo={f.saldo.toFixed(2)}
+                  data-total={f.total.toFixed(2)}
+                  data-cobrado={f.cobrado.toFixed(2)}
+                  data-cliente={f.clienteNombre}
+                  data-vencida={f.diasVencido > 0 ? 'true' : 'false'}
+                  data-vencimiento={f.fechaVencimiento ?? ''}
+                >
+                  {f.numero} — {f.clienteNombre} — Saldo: ${f.saldo.toFixed(2)}
+                  {f.diasVencido > 0 ? ` ⚠ Vencida ${f.diasVencido}d` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div id="facturaInfo" class="full-width" style="display:none">
+            <div class="info-grid">
+              <div class="info-item">
+                <span class="info-label">Cliente</span>
+                <span id="infoCliente" class="info-value">—</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Total Factura</span>
+                <span id="infoTotal" class="info-value">—</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Ya Cobrado</span>
+                <span id="infoCobrado" class="info-value">—</span>
+              </div>
+              <div class="info-item highlight">
+                <span class="info-label">Saldo Pendiente</span>
+                <span id="infoSaldo" class="info-value">—</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="monto">Monto a cobrar *</label>
+            <input type="number" id="monto" name="monto" min="0.01" step="0.01" required placeholder="0.00" />
+            <small id="montoHint" class="form-hint"></small>
+          </div>
+
+          <div class="form-group">
+            <label for="fecha">Fecha *</label>
+            <input type="date" id="fecha" name="fecha" value={today} required />
+          </div>
+
+          <div class="form-group">
+            <label for="metodoPago">Método de Pago *</label>
+            <select id="metodoPago" name="metodoPago" required>
+              <option value="efectivo">Efectivo</option>
+              <option value="transferencia">Transferencia bancaria</option>
+              <option value="cheque">Cheque</option>
+              <option value="tarjeta">Tarjeta</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="referencia">Referencia / Nro. documento</label>
+            <input type="text" id="referencia" name="referencia" placeholder="Nro. cheque, transferencia..." />
+          </div>
+
+          <div class="form-group full-width">
+            <label for="notas">Notas</label>
+            <textarea id="notas" name="notas" rows="2" placeholder="Observaciones adicionales..."></textarea>
+          </div>
+        </div>
+
+        <div class="form-footer">
+          <a href="/cobros" class="btn btn-outline">Cancelar</a>
+          <button type="submit" class="btn btn-primary">
+            <span class="material-icons-round">save</span>
+            Registrar Cobro
+          </button>
+        </div>
+      </form>
+    </div>
+  )}
+</AdminLayout>
+
+<script>
+  function onFacturaChange(sel: HTMLSelectElement) {
+    const opt = sel.selectedOptions[0];
+    const info = document.getElementById('facturaInfo')!;
+    if (!opt.value) { info.style.display = 'none'; return; }
+    info.style.display = 'block';
+    document.getElementById('infoCliente')!.textContent = opt.dataset.cliente ?? '';
+    document.getElementById('infoTotal')!.textContent = `$${opt.dataset.total}`;
+    document.getElementById('infoCobrado')!.textContent = `$${opt.dataset.cobrado}`;
+    document.getElementById('infoSaldo')!.textContent = `$${opt.dataset.saldo}`;
+    const montoInput = document.getElementById('monto') as HTMLInputElement;
+    montoInput.max = opt.dataset.saldo ?? '';
+    document.getElementById('montoHint')!.textContent = `Máximo: $${opt.dataset.saldo}`;
+  }
+</script>
+
+<style>
+  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  h1 { font-size: 1.5rem; font-weight: 700; margin: 0; }
+  .text-muted { color: var(--text-muted); font-size: 0.875rem; margin: 4px 0 0; }
+  .alert { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-radius: var(--radius); margin-bottom: 16px; font-size: 0.875rem; }
+  .alert-danger { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
+  .card { background: white; border-radius: var(--radius); border: 1px solid var(--border); padding: 24px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .full-width { grid-column: 1 / -1; }
+  label { font-weight: 500; font-size: 0.875rem; }
+  input, select, textarea { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; font-size: 0.875rem; width: 100%; box-sizing: border-box; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+  .form-hint { font-size: 0.78rem; color: var(--text-muted); }
+  .form-footer { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius); font-size: 0.875rem; font-weight: 500; border: none; cursor: pointer; text-decoration: none; transition: all 0.2s; }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-outline { background: white; border: 1px solid var(--border); color: var(--text); }
+  .btn-outline:hover { background: #f8fafc; }
+  .info-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+  .info-item { display: flex; flex-direction: column; gap: 4px; }
+  .info-item.highlight { background: #eff6ff; border-radius: var(--radius); padding: 8px; }
+  .info-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .info-value { font-size: 1rem; font-weight: 600; }
+  .empty-state { text-align: center; padding: 60px 24px; color: var(--text-muted); }
+  .empty-state .material-icons-round { font-size: 48px; margin-bottom: 12px; opacity: 0.4; display: block; }
+  .empty-state p { margin-bottom: 16px; }
+</style>

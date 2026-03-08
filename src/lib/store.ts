@@ -15,6 +15,9 @@ export type InventarioRow = typeof schema.inventario.$inferSelect;
 export type KardexRow = typeof schema.kardex.$inferSelect;
 export type Compra = typeof schema.compras.$inferSelect;
 export type Pedido = typeof schema.pedidos.$inferSelect;
+export type Servicio = typeof schema.servicios.$inferSelect;
+export type NotaCredito = typeof schema.notasCredito.$inferSelect;
+export type Cobro = typeof schema.cobros.$inferSelect;
 
 // Helper: numeric columns come back as strings from pg, convert to number
 function num(v: string | number | null): number {
@@ -44,6 +47,33 @@ function normalizeProducto(row: Producto) {
     id: String(row.id),
     precio: num(row.precio),
   };
+}
+
+function normalizeServicio(row: Servicio) {
+  return { ...row, id: String(row.id), precio: num(row.precio) };
+}
+
+function normalizeNotaCredito(row: NotaCredito) {
+  return {
+    ...row,
+    id: String(row.id),
+    facturaId: String(row.facturaId),
+    clienteId: String(row.clienteId),
+    almacenId: row.almacenId ? String(row.almacenId) : null,
+    subtotal: num(row.subtotal),
+    iva: num(row.iva),
+    total: num(row.total),
+    items: (row.items ?? []).map(i => ({
+      ...i,
+      tipo: i.tipo ?? 'producto' as const,
+      precioUnitario: num(i.precioUnitario),
+      subtotal: num(i.subtotal),
+    })),
+  };
+}
+
+function normalizeCobro(row: Cobro) {
+  return { ...row, id: String(row.id), facturaId: String(row.facturaId), clienteId: String(row.clienteId), monto: num(row.monto) };
 }
 
 function normalizeCompra(row: Compra) {
@@ -191,6 +221,7 @@ export const store = {
     total: number;
     estado: string;
     fecha: string;
+    fechaVencimiento?: string;
   }) {
     const countResult = await db.select({ count: sql<number>`count(*)` }).from(schema.facturas);
     const count = Number(countResult[0].count);
@@ -208,12 +239,14 @@ export const store = {
       total: String(data.total),
       estado: data.estado,
       fecha: data.fecha,
+      fechaVencimiento: data.fechaVencimiento ?? null,
     }).returning();
     const factura = normalizeFactura(rows[0]);
 
-    // If almacenId provided, create inventory exits (salidas)
+    // If almacenId provided, create inventory exits only for tipo='producto' items
     if (data.almacenId && data.almacenNombre) {
       for (const item of data.items) {
+        if ((item.tipo ?? 'producto') !== 'producto') continue;
         const existing = await this.getInventarioItem(data.almacenId, item.productoId);
         const stockAnterior = existing?.stock ?? 0;
         const stockNuevo = Math.max(0, stockAnterior - item.cantidad);
@@ -646,6 +679,244 @@ export const store = {
 
     const rows = await db.update(schema.pedidos).set({ estado: 'cancelado' }).where(eq(schema.pedidos.id, Number(id))).returning();
     return rows[0] ? normalizePedido(rows[0]) : null;
+  },
+
+  // --- Servicios ---
+  async getServicios() {
+    const rows = await db.select().from(schema.servicios);
+    return rows.map(normalizeServicio);
+  },
+
+  async getServicio(id: string) {
+    const rows = await db.select().from(schema.servicios).where(eq(schema.servicios.id, Number(id)));
+    return rows[0] ? normalizeServicio(rows[0]) : undefined;
+  },
+
+  async createServicio(data: { nombre: string; descripcion: string; precio: number; categoria: string; activo: boolean }) {
+    const rows = await db.insert(schema.servicios).values({ ...data, precio: String(data.precio) }).returning();
+    return normalizeServicio(rows[0]);
+  },
+
+  async updateServicio(id: string, data: Record<string, unknown>) {
+    const values = { ...data };
+    if (typeof values.precio === 'number') values.precio = String(values.precio);
+    const rows = await db.update(schema.servicios).set(values).where(eq(schema.servicios.id, Number(id))).returning();
+    return rows[0] ? normalizeServicio(rows[0]) : null;
+  },
+
+  async deleteServicio(id: string) {
+    const rows = await db.delete(schema.servicios).where(eq(schema.servicios.id, Number(id))).returning();
+    return rows.length > 0;
+  },
+
+  // --- Notas de Crédito ---
+  async getNotasCredito() {
+    const rows = await db.select().from(schema.notasCredito).orderBy(desc(schema.notasCredito.id));
+    return rows.map(normalizeNotaCredito);
+  },
+
+  async getNotaCredito(id: string) {
+    const rows = await db.select().from(schema.notasCredito).where(eq(schema.notasCredito.id, Number(id)));
+    return rows[0] ? normalizeNotaCredito(rows[0]) : undefined;
+  },
+
+  async getNotaCreditoByFactura(facturaId: string) {
+    const rows = await db.select().from(schema.notasCredito).where(eq(schema.notasCredito.facturaId, Number(facturaId)));
+    return rows[0] ? normalizeNotaCredito(rows[0]) : undefined;
+  },
+
+  async createNotaCredito(facturaId: string, motivo: string) {
+    const factura = await this.getFactura(facturaId);
+    if (!factura || factura.estado === 'cancelada') return null;
+
+    const countResult = await db.select({ count: sql<number>`count(*)` }).from(schema.notasCredito);
+    const count = Number(countResult[0].count);
+    const numero = `NC-${String(count + 1).padStart(3, '0')}`;
+    const fecha = new Date().toISOString().split('T')[0];
+
+    const rows = await db.insert(schema.notasCredito).values({
+      numero,
+      facturaId: Number(facturaId),
+      facturaNumero: factura.numero,
+      clienteId: Number(factura.clienteId),
+      clienteNombre: factura.clienteNombre,
+      almacenId: factura.almacenId ? Number(factura.almacenId) : null,
+      almacenNombre: factura.almacenNombre ?? '',
+      items: factura.items as typeof schema.notasCredito.$inferInsert['items'],
+      subtotal: String(factura.subtotal),
+      iva: String(factura.iva),
+      total: String(factura.total),
+      motivo,
+      fecha,
+    }).returning();
+    const nota = normalizeNotaCredito(rows[0]);
+
+    // Cancel the factura
+    await db.update(schema.facturas).set({ estado: 'cancelada' }).where(eq(schema.facturas.id, Number(facturaId)));
+
+    // Return inventory for tipo='producto' items that had a warehouse
+    if (factura.almacenId && factura.almacenNombre) {
+      for (const item of factura.items) {
+        if ((item.tipo ?? 'producto') !== 'producto') continue;
+        const existing = await this.getInventarioItem(factura.almacenId, item.productoId);
+        const stockAnterior = existing?.stock ?? 0;
+        const stockNuevo = stockAnterior + item.cantidad;
+        await this._adjustStock(factura.almacenId, factura.almacenNombre, item.productoId, item.productoNombre, item.cantidad, 0);
+        await this._createMovimientoKardex({
+          almacenId: factura.almacenId,
+          almacenNombre: factura.almacenNombre,
+          productoId: item.productoId,
+          productoNombre: item.productoNombre,
+          tipo: 'entrada',
+          cantidad: item.cantidad,
+          stockAnterior,
+          stockNuevo,
+          referencia: 'ajuste',
+          referenciaId: Number(nota.id),
+          referenciaNumero: nota.numero,
+          notas: `Devolución por nota de crédito ${nota.numero}`,
+          fecha,
+        });
+      }
+    }
+
+    return nota;
+  },
+
+  // --- Cobros ---
+  async getCobros(facturaId?: string) {
+    if (facturaId) {
+      const rows = await db.select().from(schema.cobros)
+        .where(eq(schema.cobros.facturaId, Number(facturaId)))
+        .orderBy(desc(schema.cobros.id));
+      return rows.map(normalizeCobro);
+    }
+    const rows = await db.select().from(schema.cobros).orderBy(desc(schema.cobros.id));
+    return rows.map(normalizeCobro);
+  },
+
+  async getCobro(id: string) {
+    const rows = await db.select().from(schema.cobros).where(eq(schema.cobros.id, Number(id)));
+    return rows[0] ? normalizeCobro(rows[0]) : undefined;
+  },
+
+  async getCobrosCliente(clienteId: string) {
+    const rows = await db.select().from(schema.cobros)
+      .where(eq(schema.cobros.clienteId, Number(clienteId)))
+      .orderBy(desc(schema.cobros.id));
+    return rows.map(normalizeCobro);
+  },
+
+  // Computes total cobrado and saldo pendiente for a factura
+  async getSaldoFactura(facturaId: string) {
+    const factura = await this.getFactura(facturaId);
+    if (!factura) return null;
+    const cobrosRows = await db.select().from(schema.cobros).where(
+      and(eq(schema.cobros.facturaId, Number(facturaId)), eq(schema.cobros.estado, 'aplicado'))
+    );
+    const cobrado = cobrosRows.reduce((sum, c) => sum + num(c.monto), 0);
+    const saldo = Math.max(0, factura.total - cobrado);
+    return { total: factura.total, cobrado, saldo };
+  },
+
+  // Internal: recalculate and update factura estado based on cobros
+  async _recalcularEstadoFactura(facturaId: string) {
+    const factura = await this.getFactura(facturaId);
+    if (!factura || factura.estado === 'cancelada') return;
+    const cobrosRows = await db.select().from(schema.cobros).where(
+      and(eq(schema.cobros.facturaId, Number(facturaId)), eq(schema.cobros.estado, 'aplicado'))
+    );
+    const cobrado = cobrosRows.reduce((sum, c) => sum + num(c.monto), 0);
+    const saldo = Math.max(0, factura.total - cobrado);
+    const today = new Date().toISOString().split('T')[0];
+
+    let nuevoEstado: string;
+    if (saldo === 0) {
+      nuevoEstado = 'pagada';
+    } else if (cobrado > 0) {
+      nuevoEstado = 'parcial';
+    } else if (factura.fechaVencimiento && factura.fechaVencimiento < today) {
+      nuevoEstado = 'vencida';
+    } else {
+      nuevoEstado = 'pendiente';
+    }
+    await db.update(schema.facturas).set({ estado: nuevoEstado }).where(eq(schema.facturas.id, Number(facturaId)));
+  },
+
+  async createCobro(data: {
+    facturaId: string;
+    monto: number;
+    metodoPago: string;
+    referencia?: string;
+    notas?: string;
+    fecha: string;
+  }) {
+    const factura = await this.getFactura(data.facturaId);
+    if (!factura || factura.estado === 'cancelada' || factura.estado === 'pagada') {
+      return { ok: false, error: 'La factura no admite cobros.' };
+    }
+    const saldoInfo = await this.getSaldoFactura(data.facturaId);
+    if (!saldoInfo || data.monto <= 0 || data.monto > saldoInfo.saldo + 0.001) {
+      return { ok: false, error: `Monto inválido. Saldo pendiente: ${saldoInfo?.saldo?.toFixed(2) ?? 0}` };
+    }
+
+    const countResult = await db.select({ count: sql<number>`count(*)` }).from(schema.cobros);
+    const count = Number(countResult[0].count);
+    const numero = `COB-${String(count + 1).padStart(3, '0')}`;
+
+    const rows = await db.insert(schema.cobros).values({
+      numero,
+      facturaId: Number(data.facturaId),
+      facturaNumero: factura.numero,
+      clienteId: Number(factura.clienteId),
+      clienteNombre: factura.clienteNombre,
+      monto: String(data.monto),
+      fecha: data.fecha,
+      metodoPago: data.metodoPago,
+      referencia: data.referencia ?? '',
+      notas: data.notas ?? '',
+      estado: 'aplicado',
+    }).returning();
+
+    await this._recalcularEstadoFactura(data.facturaId);
+    return { ok: true, cobro: normalizeCobro(rows[0]) };
+  },
+
+  async anularCobro(id: string) {
+    const cobro = await this.getCobro(id);
+    if (!cobro || cobro.estado === 'anulado') return { ok: false, error: 'Cobro ya anulado.' };
+    await db.update(schema.cobros).set({ estado: 'anulado' }).where(eq(schema.cobros.id, Number(id)));
+    await this._recalcularEstadoFactura(cobro.facturaId);
+    return { ok: true };
+  },
+
+  // --- Cuentas por Cobrar ---
+  async getCuentasPorCobrar() {
+    // All facturas not pagada/cancelada
+    const todasFacturas = await db.select().from(schema.facturas);
+    const pendientes = todasFacturas
+      .map(normalizeFactura)
+      .filter(f => f.estado !== 'pagada' && f.estado !== 'cancelada');
+
+    const today = new Date().toISOString().split('T')[0];
+
+    const result = await Promise.all(pendientes.map(async (f) => {
+      const cobrosRows = await db.select().from(schema.cobros).where(
+        and(eq(schema.cobros.facturaId, Number(f.id)), eq(schema.cobros.estado, 'aplicado'))
+      );
+      const cobrado = cobrosRows.reduce((sum, c) => sum + num(c.monto), 0);
+      const saldo = Math.max(0, f.total - cobrado);
+
+      let diasVencido = 0;
+      if (f.fechaVencimiento && f.fechaVencimiento < today) {
+        const ms = new Date(today).getTime() - new Date(f.fechaVencimiento).getTime();
+        diasVencido = Math.floor(ms / 86400000);
+      }
+
+      return { ...f, cobrado, saldo, diasVencido };
+    }));
+
+    return result.sort((a, b) => b.diasVencido - a.diasVencido);
   },
 
   async despacharPedido(id: string) {

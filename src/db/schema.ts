@@ -57,6 +57,7 @@ export const facturas = pgTable('facturas', {
   almacenId: integer('almacen_id'),
   almacenNombre: varchar('almacen_nombre', { length: 200 }).default(''),
   items: jsonb('items').$type<{
+    tipo: 'producto' | 'servicio';
     productoId: string;
     productoNombre: string;
     cantidad: number;
@@ -66,8 +67,25 @@ export const facturas = pgTable('facturas', {
   subtotal: numeric('subtotal', { precision: 12, scale: 2 }).notNull(),
   iva: numeric('iva', { precision: 12, scale: 2 }).notNull(),
   total: numeric('total', { precision: 12, scale: 2 }).notNull(),
-  estado: varchar('estado', { length: 20 }).notNull().default('pendiente'),
+  estado: varchar('estado', { length: 20 }).notNull().default('pendiente'), // pendiente | parcial | pagada | cancelada | vencida
   fecha: date('fecha').defaultNow().notNull(),
+  fechaVencimiento: date('fecha_vencimiento'),
+});
+
+// --- Cobros (pagos aplicados a facturas) ---
+export const cobros = pgTable('cobros', {
+  id: serial('id').primaryKey(),
+  numero: varchar('numero', { length: 20 }).notNull().unique(),
+  facturaId: integer('factura_id').notNull(),
+  facturaNumero: varchar('factura_numero', { length: 20 }).notNull(),
+  clienteId: integer('cliente_id').notNull(),
+  clienteNombre: varchar('cliente_nombre', { length: 300 }).notNull(),
+  monto: numeric('monto', { precision: 12, scale: 2 }).notNull(),
+  fecha: date('fecha').defaultNow().notNull(),
+  metodoPago: varchar('metodo_pago', { length: 50 }).notNull().default('efectivo'), // efectivo | transferencia | cheque | tarjeta
+  referencia: varchar('referencia', { length: 100 }).default(''), // Nro cheque, Nro transferencia
+  notas: text('notas').default(''),
+  estado: varchar('estado', { length: 20 }).notNull().default('aplicado'), // aplicado | anulado
 });
 
 // --- Empresa (config singleton, 1 row) ---
@@ -160,5 +178,40 @@ export const pedidos = pgTable('pedidos', {
   total: numeric('total', { precision: 12, scale: 2 }).notNull(),
   estado: varchar('estado', { length: 20 }).notNull().default('borrador'),
   notas: text('notas').default(''),
+  fecha: date('fecha').defaultNow().notNull(),
+});
+
+// --- Servicios (no mueven inventario) ---
+export const servicios = pgTable('servicios', {
+  id: serial('id').primaryKey(),
+  nombre: varchar('nombre', { length: 300 }).notNull(),
+  descripcion: text('descripcion').default(''),
+  precio: numeric('precio', { precision: 12, scale: 2 }).notNull(),
+  categoria: varchar('categoria', { length: 100 }).default(''),
+  activo: boolean('activo').default(true).notNull(),
+});
+
+// --- Notas de Crédito (anulación de facturas) ---
+export const notasCredito = pgTable('notas_credito', {
+  id: serial('id').primaryKey(),
+  numero: varchar('numero', { length: 20 }).notNull().unique(),
+  facturaId: integer('factura_id').notNull(),
+  facturaNumero: varchar('factura_numero', { length: 20 }).notNull(),
+  clienteId: integer('cliente_id').notNull(),
+  clienteNombre: varchar('cliente_nombre', { length: 300 }).notNull(),
+  almacenId: integer('almacen_id'),
+  almacenNombre: varchar('almacen_nombre', { length: 200 }).default(''),
+  items: jsonb('items').$type<{
+    tipo: 'producto' | 'servicio';
+    productoId: string;
+    productoNombre: string;
+    cantidad: number;
+    precioUnitario: number;
+    subtotal: number;
+  }[]>().default([]),
+  subtotal: numeric('subtotal', { precision: 12, scale: 2 }).notNull(),
+  iva: numeric('iva', { precision: 12, scale: 2 }).notNull(),
+  total: numeric('total', { precision: 12, scale: 2 }).notNull(),
+  motivo: text('motivo').notNull().default(''),
   fecha: date('fecha').defaultNow().notNull(),
 });

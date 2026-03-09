@@ -3,7 +3,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 import { store } from '../../lib/store';
 
 const tab = (Astro.url.searchParams.get('tab') ?? 'departamentos') as
-  'departamentos' | 'grupos' | 'marcas' | 'lineas';
+  'departamentos' | 'grupos' | 'marcas' | 'lineas' | 'tiposCliente';
 
 let mensaje = '';
 let tipoMensaje = 'success';
@@ -34,6 +34,10 @@ if (Astro.request.method === 'POST') {
       if (action === 'create') await store.createLinea({ nombre, descripcion: desc });
       else if (action === 'update') await store.updateLinea(id, { nombre, descripcion: desc, activo });
       else if (action === 'delete') await store.deleteLinea(id);
+    } else if (catalog === 'tiposCliente') {
+      if (action === 'create') await store.createTipoCliente({ nombre, descripcion: desc });
+      else if (action === 'update') await store.updateTipoCliente(id, { nombre, descripcion: desc, activo });
+      else if (action === 'delete') await store.deleteTipoCliente(id);
     }
     mensaje = action === 'delete' ? 'Registro eliminado.' :
               action === 'create' ? 'Registro creado.' : 'Registro actualizado.';
@@ -44,18 +48,20 @@ if (Astro.request.method === 'POST') {
   return Astro.redirect(`/catalogos?tab=${catalog}`);
 }
 
-const [departamentos, grupos, marcas, lineas] = await Promise.all([
+const [departamentos, grupos, marcas, lineas, tiposCliente] = await Promise.all([
   store.getDepartamentos(),
   store.getGrupos(),
   store.getMarcas(),
   store.getLineas(),
+  store.getTiposCliente(),
 ]);
 
 const tabs = [
-  { id: 'departamentos', label: 'Departamentos', icon: 'category',   data: departamentos },
-  { id: 'grupos',        label: 'Grupos',        icon: 'workspaces', data: grupos },
-  { id: 'marcas',        label: 'Marcas',        icon: 'sell',       data: marcas },
-  { id: 'lineas',        label: 'Líneas',         icon: 'reorder',    data: lineas },
+  { id: 'departamentos', label: 'Departamentos',    icon: 'category',        data: departamentos },
+  { id: 'grupos',        label: 'Grupos',           icon: 'workspaces',      data: grupos },
+  { id: 'marcas',        label: 'Marcas',           icon: 'sell',            data: marcas },
+  { id: 'lineas',        label: 'Líneas',            icon: 'reorder',         data: lineas },
+  { id: 'tiposCliente',  label: 'Tipos de Cliente', icon: 'person_pin',      data: tiposCliente },
 ] as const;
 
 const activeData = tabs.find(t => t.id === tab)?.data ?? [];

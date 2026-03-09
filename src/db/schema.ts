@@ -26,13 +26,49 @@ export const usuarios = pgTable('usuarios', {
   activo: boolean('activo').default(true).notNull(),
 });
 
+// --- Tipos de Cliente (catálogo) ---
+export const tiposCliente = pgTable('tipos_cliente', {
+  id: serial('id').primaryKey(),
+  nombre: varchar('nombre', { length: 200 }).notNull(),
+  descripcion: text('descripcion').default(''),
+  activo: boolean('activo').default(true).notNull(),
+});
+
+// --- Vendedores ---
+export const vendedores = pgTable('vendedores', {
+  id: serial('id').primaryKey(),
+  nombre: varchar('nombre', { length: 300 }).notNull(),
+  email: varchar('email', { length: 200 }).default(''),
+  telefono: varchar('telefono', { length: 50 }).default(''),
+  activo: boolean('activo').default(true).notNull(),
+});
+
 // --- Clientes ---
 export const clientes = pgTable('clientes', {
   id: serial('id').primaryKey(),
+  // Identificación
   nombre: varchar('nombre', { length: 300 }).notNull(),
-  email: varchar('email', { length: 200 }).notNull(),
+  email: varchar('email', { length: 200 }).default(''),
   telefono: varchar('telefono', { length: 50 }).default(''),
   direccion: text('direccion').default(''),
+  // Tipo de cliente
+  tipoClienteId: integer('tipo_cliente_id'),
+  tipoCliente: varchar('tipo_cliente', { length: 200 }).default(''),
+  contribuyente: varchar('contribuyente', { length: 50 }).default(''), // 'juridico' | 'natural' | ''
+  // Datos fiscales
+  ruc: varchar('ruc', { length: 50 }).default(''),
+  digitoVerificador: varchar('digito_verificador', { length: 10 }).default(''),
+  razonSocial: varchar('razon_social', { length: 300 }).default(''),
+  nombreComercial: varchar('nombre_comercial', { length: 300 }).default(''),
+  // Datos administrativos
+  permiteCredito: boolean('permite_credito').default(false).notNull(),
+  limiteCredito: numeric('limite_credito', { precision: 12, scale: 2 }).default('0'),
+  diaVencimiento: integer('dia_vencimiento').default(30),
+  descuentoParcial: numeric('descuento_parcial', { precision: 5, scale: 2 }).default('0'),
+  descuentoGlobal: numeric('descuento_global', { precision: 5, scale: 2 }).default('0'),
+  vendedorId: integer('vendedor_id'),
+  vendedor: varchar('vendedor', { length: 300 }).default(''),
+  // Legado
   rfc: varchar('rfc', { length: 20 }).default(''),
   createdAt: date('created_at').defaultNow().notNull(),
 });

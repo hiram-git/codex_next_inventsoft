@@ -23,6 +23,8 @@ export type Departamento = typeof schema.departamentos.$inferSelect;
 export type Grupo = typeof schema.grupos.$inferSelect;
 export type Marca = typeof schema.marcas.$inferSelect;
 export type Linea = typeof schema.lineas.$inferSelect;
+export type TipoCliente = typeof schema.tiposCliente.$inferSelect;
+export type Vendedor = typeof schema.vendedores.$inferSelect;
 
 // Helper: numeric columns come back as strings from pg, convert to number
 function num(v: string | number | null): number {
@@ -189,28 +191,80 @@ export const store = {
 
   // --- Clientes ---
   async getClientes() {
-    const rows = await db.select().from(schema.clientes);
-    return rows.map(normalizeId);
+    const rows = await db.select().from(schema.clientes).orderBy(schema.clientes.nombre);
+    return rows.map(r => ({
+      ...normalizeId(r),
+      limiteCredito: num(r.limiteCredito),
+      descuentoParcial: num(r.descuentoParcial),
+      descuentoGlobal: num(r.descuentoGlobal),
+    }));
   },
 
   async getCliente(id: string) {
     const rows = await db.select().from(schema.clientes).where(eq(schema.clientes.id, Number(id)));
-    return rows[0] ? normalizeId(rows[0]) : undefined;
+    if (!rows[0]) return undefined;
+    const r = rows[0];
+    return {
+      ...normalizeId(r),
+      limiteCredito: num(r.limiteCredito),
+      descuentoParcial: num(r.descuentoParcial),
+      descuentoGlobal: num(r.descuentoGlobal),
+    };
   },
 
-  async createCliente(data: { nombre: string; email: string; telefono: string; direccion: string; rfc: string }) {
-    const rows = await db.insert(schema.clientes).values(data).returning();
+  async createCliente(data: Record<string, unknown>) {
+    const values: any = { ...data };
+    for (const k of ['limiteCredito', 'descuentoParcial', 'descuentoGlobal']) {
+      if (typeof values[k] === 'number') values[k] = String(values[k]);
+    }
+    const rows = await db.insert(schema.clientes).values(values).returning();
     return normalizeId(rows[0]);
   },
 
   async updateCliente(id: string, data: Record<string, unknown>) {
-    const rows = await db.update(schema.clientes).set(data).where(eq(schema.clientes.id, Number(id))).returning();
+    const values: any = { ...data };
+    for (const k of ['limiteCredito', 'descuentoParcial', 'descuentoGlobal']) {
+      if (typeof values[k] === 'number') values[k] = String(values[k]);
+    }
+    const rows = await db.update(schema.clientes).set(values).where(eq(schema.clientes.id, Number(id))).returning();
     return rows[0] ? normalizeId(rows[0]) : null;
   },
 
   async deleteCliente(id: string) {
     const rows = await db.delete(schema.clientes).where(eq(schema.clientes.id, Number(id))).returning();
     return rows.length > 0;
+  },
+
+  // --- Tipos de Cliente ---
+  async getTiposCliente() { return db.select().from(schema.tiposCliente).orderBy(schema.tiposCliente.nombre); },
+  async createTipoCliente(data: { nombre: string; descripcion?: string }) {
+    const rows = await db.insert(schema.tiposCliente).values({ nombre: data.nombre, descripcion: data.descripcion ?? '' }).returning();
+    return rows[0];
+  },
+  async updateTipoCliente(id: number, data: { nombre: string; descripcion?: string; activo?: boolean }) {
+    const rows = await db.update(schema.tiposCliente).set(data).where(eq(schema.tiposCliente.id, id)).returning();
+    return rows[0];
+  },
+  async deleteTipoCliente(id: number) {
+    await db.delete(schema.tiposCliente).where(eq(schema.tiposCliente.id, id));
+  },
+
+  // --- Vendedores ---
+  async getVendedores() { return db.select().from(schema.vendedores).orderBy(schema.vendedores.nombre); },
+  async getVendedor(id: string) {
+    const rows = await db.select().from(schema.vendedores).where(eq(schema.vendedores.id, Number(id)));
+    return rows[0];
+  },
+  async createVendedor(data: { nombre: string; email?: string; telefono?: string }) {
+    const rows = await db.insert(schema.vendedores).values({ nombre: data.nombre, email: data.email ?? '', telefono: data.telefono ?? '' }).returning();
+    return rows[0];
+  },
+  async updateVendedor(id: number, data: { nombre: string; email?: string; telefono?: string; activo?: boolean }) {
+    const rows = await db.update(schema.vendedores).set(data).where(eq(schema.vendedores.id, id)).returning();
+    return rows[0];
+  },
+  async deleteVendedor(id: number) {
+    await db.delete(schema.vendedores).where(eq(schema.vendedores.id, id));
   },
 
   // --- Catálogos auxiliares ---

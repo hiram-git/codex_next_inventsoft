@@ -1,0 +1,297 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { store } from '../../../lib/store';
+
+let mensaje = '';
+let tipoMensaje = 'success';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = form.get('_action')?.toString();
+
+  if (action === 'guardar') {
+    await store.updateEmpresa({
+      impresoraTipo:        form.get('impresoraTipo')?.toString()    ?? 'a4',
+      impresoraConexion:    form.get('impresoraConexion')?.toString() ?? 'network',
+      impresoraHost:        form.get('impresoraHost')?.toString()     ?? '',
+      impresoraPuerto:      parseInt(form.get('impresoraPuerto')?.toString() ?? '9100'),
+      impresoraDispositivo: form.get('impresoraDispositivo')?.toString() ?? '',
+      impresoraAncho:       parseInt(form.get('impresoraAncho')?.toString() ?? '32'),
+    });
+    mensaje = 'Configuración de impresora guardada.';
+  } else if (action === 'probar') {
+    // Test print: send a simple test page
+    try {
+      const empresa = await store.getEmpresa();
+      const { imprimirTicketFactura } = await import('../../../lib/ticket');
+      const testDoc = {
+        numero: 'TEST-001', fecha: new Date().toISOString().split('T')[0],
+        clienteNombre: 'Prueba de impresión',
+        estado: 'prueba', fechaVencimiento: null,
+        items: [{ productoNombre: 'Producto de prueba', cantidad: 1, precioUnitario: 100, subtotal: 100 }],
+        subtotal: 100, iva: 16, total: 116,
+      };
+      await imprimirTicketFactura(testDoc, empresa);
+      mensaje = '¡Prueba enviada a la impresora!';
+    } catch (e: any) {
+      mensaje = `Error al conectar con la impresora: ${e.message}`;
+      tipoMensaje = 'error';
+    }
+  }
+}
+
+const empresa = await store.getEmpresa();
+---
+
+<AdminLayout title="Configuración de Impresora">
+  <div class="page-header">
+    <div>
+      <h1>Configuración de Impresora</h1>
+      <p class="subtitle">Define cómo se generan e imprimen los documentos del sistema</p>
+    </div>
+  </div>
+
+  {mensaje && (
+    <div class:list={['alert', tipoMensaje === 'error' ? 'alert-danger' : 'alert-success']}>
+      <span class="material-icons-round">{tipoMensaje === 'error' ? 'error' : 'check_circle'}</span>
+      {mensaje}
+    </div>
+  )}
+
+  <form method="POST" id="formImpresora">
+    <input type="hidden" name="_action" value="guardar" />
+
+    <!-- Tipo de impresión -->
+    <div class="section-card">
+      <h2>
+        <span class="material-icons-round">print</span>
+        Tipo de Impresión
+      </h2>
+      <p class="section-desc">Selecciona si los documentos se generarán como PDF A4 o como ticket térmico</p>
+
+      <div class="tipo-grid">
+        <label class:list={['tipo-option', { active: (empresa?.impresoraTipo ?? 'a4') === 'a4' }]}>
+          <input type="radio" name="impresoraTipo" value="a4"
+            checked={(empresa?.impresoraTipo ?? 'a4') === 'a4'} onchange="tipoChange()" />
+          <span class="material-icons-round tipo-icon">description</span>
+          <span class="tipo-label">PDF A4</span>
+          <span class="tipo-desc">Documento completo en hoja tamaño carta/A4. Ideal para facturas formales y archivo.</span>
+        </label>
+
+        <label class:list={['tipo-option', { active: empresa?.impresoraTipo === 'ticket' }]}>
+          <input type="radio" name="impresoraTipo" value="ticket"
+            checked={empresa?.impresoraTipo === 'ticket'} onchange="tipoChange()" />
+          <span class="material-icons-round tipo-icon">receipt_long</span>
+          <span class="tipo-label">Ticket Térmico</span>
+          <span class="tipo-desc">Formato compacto para impresoras térmicas de 58mm o 80mm. Ideal para punto de venta.</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Configuración de impresora térmica -->
+    <div class="section-card" id="seccionTicket" style={(empresa?.impresoraTipo === 'ticket') ? '' : 'display:none'}>
+      <h2>
+        <span class="material-icons-round">settings</span>
+        Parámetros de Impresora Térmica
+      </h2>
+
+      <!-- Tipo de conexión -->
+      <div class="form-group">
+        <label>Tipo de Conexión</label>
+        <div class="radio-row">
+          <label class="radio-opt">
+            <input type="radio" name="impresoraConexion" value="network"
+              checked={(empresa?.impresoraConexion ?? 'network') === 'network'}
+              onchange="conexionChange()" />
+            <span class="material-icons-round">wifi</span>
+            WiFi / Red LAN
+          </label>
+          <label class="radio-opt">
+            <input type="radio" name="impresoraConexion" value="usb"
+              checked={empresa?.impresoraConexion === 'usb'}
+              onchange="conexionChange()" />
+            <span class="material-icons-round">usb</span>
+            USB Directo
+          </label>
+        </div>
+      </div>
+
+      <!-- Network params -->
+      <div id="paramsNetwork" style={(empresa?.impresoraConexion === 'usb') ? 'display:none' : ''}>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Dirección IP de la Impresora</label>
+            <input type="text" name="impresoraHost" class="form-control"
+              value={empresa?.impresoraHost ?? '192.168.1.100'}
+              placeholder="192.168.1.100" />
+            <small class="hint">IP asignada a la impresora en tu red local</small>
+          </div>
+          <div class="form-group" style="max-width:160px">
+            <label>Puerto</label>
+            <input type="number" name="impresoraPuerto" class="form-control"
+              value={empresa?.impresoraPuerto ?? 9100}
+              min="1" max="65535" />
+            <small class="hint">Generalmente 9100</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- USB params -->
+      <div id="paramsUSB" style={(empresa?.impresoraConexion === 'usb') ? '' : 'display:none'}>
+        <div class="form-group">
+          <label>Ruta del Dispositivo</label>
+          <input type="text" name="impresoraDispositivo" class="form-control"
+            value={empresa?.impresoraDispositivo ?? '/dev/usb/lp0'}
+            placeholder="/dev/usb/lp0" />
+          <small class="hint">
+            Linux: <code>/dev/usb/lp0</code> &nbsp;|&nbsp;
+            Windows: <code>\\.\USB001</code> &nbsp;|&nbsp;
+            Android (Termux): <code>/dev/bus/usb/001/002</code>
+          </small>
+        </div>
+      </div>
+
+      <!-- Ancho del papel -->
+      <div class="form-group">
+        <label>Ancho del Papel</label>
+        <div class="radio-row">
+          <label class="radio-opt">
+            <input type="radio" name="impresoraAncho" value="32"
+              checked={(empresa?.impresoraAncho ?? 32) === 32} />
+            <span class="material-icons-round">straighten</span>
+            58mm — 32 columnas
+          </label>
+          <label class="radio-opt">
+            <input type="radio" name="impresoraAncho" value="48"
+              checked={empresa?.impresoraAncho === 48} />
+            <span class="material-icons-round">straighten</span>
+            80mm — 48 columnas
+          </label>
+        </div>
+      </div>
+
+      <!-- Info box -->
+      <div class="info-box">
+        <span class="material-icons-round">info</span>
+        <div>
+          <strong>Modelos compatibles</strong> — Cualquier impresora térmica con protocolo ESC/POS:
+          Epson TM-series, Star TSP-series, MUNBYN, Xprinter, Bixolon, y la mayoría de impresoras
+          chinas de 58mm / 80mm.
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="actions">
+      <button type="submit" class="btn btn-primary">
+        <span class="material-icons-round" style="font-size:18px">save</span>
+        Guardar Configuración
+      </button>
+      <button type="button" class="btn btn-ticket" id="btnProbar"
+        style={(empresa?.impresoraTipo === 'ticket') ? '' : 'display:none'}
+        onclick="probarImpresora()">
+        <span class="material-icons-round" style="font-size:18px">receipt_long</span>
+        Imprimir Ticket de Prueba
+      </button>
+    </div>
+  </form>
+</AdminLayout>
+
+<style>
+  .page-header { margin-bottom: 24px; }
+  h1 { font-size: 1.5rem; font-weight: 700; margin: 0 0 4px; }
+  .subtitle { color: var(--text-muted); font-size: 0.875rem; margin: 0; }
+  .alert { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-radius: var(--radius); margin-bottom: 20px; font-size: 0.875rem; }
+  .alert-success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+  .alert-danger  { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
+
+  .section-card { background: white; border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 20px; }
+  .section-card h2 { display: flex; align-items: center; gap: 8px; font-size: 1rem; font-weight: 600; margin: 0 0 6px; }
+  .section-desc { font-size: 0.85rem; color: var(--text-muted); margin: 0 0 20px; }
+
+  /* Tipo cards */
+  .tipo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .tipo-option { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 20px 16px;
+    border: 2px solid var(--border); border-radius: var(--radius); cursor: pointer; transition: all .2s; text-align: center; }
+  .tipo-option input[type=radio] { display: none; }
+  .tipo-option:hover { border-color: var(--primary); background: #f0f7ff; }
+  .tipo-option.active { border-color: var(--primary); background: #eff6ff; }
+  .tipo-icon { font-size: 36px; color: var(--primary); }
+  .tipo-label { font-weight: 600; font-size: 1rem; }
+  .tipo-desc { font-size: 0.8rem; color: var(--text-muted); line-height: 1.4; }
+
+  /* Radio rows */
+  .radio-row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .radio-opt { display: flex; align-items: center; gap: 6px; padding: 8px 16px;
+    border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer;
+    font-size: 0.875rem; transition: all .2s; }
+  .radio-opt:has(input:checked) { border-color: var(--primary); background: #eff6ff; color: var(--primary); font-weight: 500; }
+  .radio-opt input { accent-color: var(--primary); }
+
+  /* Form elements */
+  .form-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 16px; }
+  .form-group label { font-weight: 500; font-size: 0.875rem; }
+  .form-control { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px;
+    font-size: 0.875rem; width: 100%; box-sizing: border-box; }
+  .form-control:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+  .form-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: start; }
+  .hint { font-size: 0.78rem; color: var(--text-muted); }
+  code { background: #f1f5f9; padding: 1px 5px; border-radius: 3px; font-size: 0.8rem; }
+
+  /* Info box */
+  .info-box { display: flex; gap: 10px; background: #eff6ff; border: 1px solid #bfdbfe;
+    border-radius: var(--radius); padding: 12px 16px; font-size: 0.82rem; color: #1e40af; margin-top: 8px; }
+  .info-box strong { display: block; margin-bottom: 2px; }
+
+  /* Actions */
+  .actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; border-radius: var(--radius);
+    font-size: 0.875rem; font-weight: 500; border: 1px solid transparent; cursor: pointer; text-decoration: none; transition: all .2s; }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-ticket { background: #0f766e; color: white; }
+  .btn-ticket:hover { background: #0d6460; }
+  .btn-ticket:disabled { opacity: .6; cursor: default; }
+
+  @media (max-width: 600px) {
+    .tipo-grid { grid-template-columns: 1fr; }
+    .form-row { grid-template-columns: 1fr; }
+  }
+</style>
+
+<script>
+function tipoChange() {
+  const tipo = (document.querySelector('input[name="impresoraTipo"]:checked') as HTMLInputElement)?.value;
+  document.getElementById('seccionTicket')!.style.display = tipo === 'ticket' ? '' : 'none';
+  document.getElementById('btnProbar')!.style.display      = tipo === 'ticket' ? '' : 'none';
+
+  // Update active card styles
+  document.querySelectorAll('.tipo-option').forEach(el => {
+    const radio = el.querySelector('input[type=radio]') as HTMLInputElement;
+    el.classList.toggle('active', radio.checked);
+  });
+}
+
+function conexionChange() {
+  const con = (document.querySelector('input[name="impresoraConexion"]:checked') as HTMLInputElement)?.value;
+  document.getElementById('paramsNetwork')!.style.display = con === 'usb' ? 'none' : '';
+  document.getElementById('paramsUSB')!.style.display     = con === 'usb' ? '' : 'none';
+}
+
+function probarImpresora() {
+  const btn = document.getElementById('btnProbar') as HTMLButtonElement;
+  // Save first, then test
+  const form = document.getElementById('formImpresora') as HTMLFormElement;
+  const hidden = form.querySelector('input[name="_action"]') as HTMLInputElement;
+  const origAction = hidden.value;
+  hidden.value = 'probar';
+  btn.disabled = true;
+  btn.innerHTML = '<span class="material-icons-round" style="font-size:18px">autorenew</span> Probando...';
+  form.submit();
+}
+
+// Init radio styles on load
+document.querySelectorAll('input[name="impresoraConexion"]').forEach(r =>
+  r.addEventListener('change', conexionChange)
+);
+</script>

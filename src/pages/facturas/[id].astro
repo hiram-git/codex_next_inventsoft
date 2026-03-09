@@ -52,6 +52,12 @@ const vencida = factura.fechaVencimiento && factura.fechaVencimiento < today && 
       }]}>{factura.estado}</span>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a href={`/api/pdf/factura/${id}`} class="btn btn-pdf">
+        <span class="material-icons-round" style="font-size:18px">picture_as_pdf</span> PDF
+      </a>
+      <button class="btn btn-ticket" onclick={`ticketBtn(this,'/api/ticket/factura/${id}')`}>
+        <span class="material-icons-round" style="font-size:18px">receipt_long</span> Ticket
+      </button>
       <a href={`/facturas/${id}/imprimir`} target="_blank" class="btn btn-outline">
         <span class="material-icons-round" style="font-size:18px">print</span> Imprimir
       </a>
@@ -295,6 +301,13 @@ const vencida = factura.fechaVencimiento && factura.fechaVencimiento < today && 
   .btn-danger { background: var(--danger); color: white; }
   .btn-danger:hover { background: #b91c1c; }
   .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+  .btn-pdf { background: #dc2626; color: white; }
+  .btn-pdf:hover { background: #b91c1c; }
+  .btn-ticket { background: #0f766e; color: white; border-color: transparent; }
+  .btn-ticket:hover { background: #0d6460; }
+  .btn-ticket:disabled { opacity: .6; cursor: default; }
+  .btn-outline { background: white; border-color: var(--border); color: var(--text); }
+  .btn-outline:hover { background: #f8fafc; }
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: none; align-items: center; justify-content: center; z-index: 999; }
   .modal { background: white; border-radius: var(--radius); padding: 28px; max-width: 480px; width: 90%; box-shadow: 0 10px 40px rgba(0,0,0,.2); }
   .modal h2 { margin: 0 0 12px; }
@@ -307,3 +320,27 @@ const vencida = factura.fechaVencimiento && factura.fechaVencimiento < today && 
     .bottom-grid { grid-template-columns: 1fr; }
   }
 </style>
+
+<script>
+function ticketBtn(btn: HTMLButtonElement, url: string) {
+  btn.disabled = true;
+  const orig = btn.innerHTML;
+  btn.innerHTML = '<span class="material-icons-round" style="font-size:18px;animation:spin 1s linear infinite">autorenew</span> Imprimiendo...';
+  fetch(url, { method: 'POST' })
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) {
+        btn.innerHTML = '<span class="material-icons-round" style="font-size:18px">check</span> Impreso';
+        setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 2500);
+      } else {
+        alert('Error al imprimir: ' + d.error);
+        btn.innerHTML = orig; btn.disabled = false;
+      }
+    })
+    .catch(() => {
+      alert('No se pudo conectar con la impresora. Verifique la conexión.');
+      btn.innerHTML = orig; btn.disabled = false;
+    });
+}
+</script>
+

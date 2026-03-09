@@ -55,6 +55,12 @@ if (cot.estado === 'enviada') {
       {vencida && <span class="badge badge-danger">Expirada</span>}
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a href={`/api/pdf/cotizacion/${id}`} class="btn btn-pdf">
+        <span class="material-icons-round" style="font-size:18px">picture_as_pdf</span> PDF
+      </a>
+      <button class="btn btn-ticket" onclick={`ticketBtn(this,'/api/ticket/cotizacion/${id}')`}>
+        <span class="material-icons-round" style="font-size:18px">receipt_long</span> Ticket
+      </button>
       <a href={`/cotizaciones/${id}/imprimir`} target="_blank" class="btn btn-outline">
         <span class="material-icons-round" style="font-size:18px">print</span> Imprimir
       </a>
@@ -254,6 +260,11 @@ if (cot.estado === 'enviada') {
   .btn-info:hover { background: #1d4ed8; }
   .btn-danger { background: var(--danger); color: white; }
   .btn-danger:hover { background: #b91c1c; }
+  .btn-pdf { background: #dc2626; color: white; }
+  .btn-pdf:hover { background: #b91c1c; }
+  .btn-ticket { background: #0f766e; color: white; border-color: transparent; }
+  .btn-ticket:hover { background: #0d6460; }
+  .btn-ticket:disabled { opacity: .6; cursor: default; }
   .form-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 16px; }
   .form-group label { font-weight: 500; font-size: 0.875rem; }
   .form-control { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; font-size: 0.875rem; width: 100%; box-sizing: border-box; }
@@ -269,3 +280,24 @@ if (cot.estado === 'enviada') {
     .info-grid { grid-template-columns: 1fr 1fr; }
   }
 </style>
+
+<script>
+function ticketBtn(btn: HTMLButtonElement, url: string) {
+  btn.disabled = true;
+  const orig = btn.innerHTML;
+  btn.innerHTML = '<span class="material-icons-round" style="font-size:18px">autorenew</span> Imprimiendo...';
+  fetch(url, { method: 'POST' })
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) {
+        btn.innerHTML = '<span class="material-icons-round" style="font-size:18px">check</span> Impreso';
+        setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 2500);
+      } else {
+        alert('Error: ' + d.error);
+        btn.innerHTML = orig; btn.disabled = false;
+      }
+    })
+    .catch(() => { alert('No se pudo conectar con la impresora.'); btn.innerHTML = orig; btn.disabled = false; });
+}
+</script>
+

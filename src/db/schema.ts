@@ -97,6 +97,16 @@ export const empresa = pgTable('empresa', {
   telefono: varchar('telefono', { length: 50 }).default(''),
   email: varchar('email', { length: 200 }).default(''),
   logo: text('logo').default(''),
+  // Configuración de impresora
+  // impresora_tipo: 'ticket' = impresora térmica ESC/POS | 'a4' = PDF A4 (default)
+  impresoraTipo: varchar('impresora_tipo', { length: 10 }).default('a4'),
+  // impresora_conexion: 'network' = WiFi/LAN | 'usb' = USB directo
+  impresoraConexion: varchar('impresora_conexion', { length: 10 }).default('network'),
+  impresoraHost: varchar('impresora_host', { length: 100 }).default('192.168.1.100'),
+  impresoraPuerto: integer('impresora_puerto').default(9100),
+  impresoraDispositivo: varchar('impresora_dispositivo', { length: 200 }).default('/dev/usb/lp0'),
+  // impresora_ancho: 32 = papel 58mm | 48 = papel 80mm
+  impresoraAncho: integer('impresora_ancho').default(32),
 });
 
 // --- Almacenes ---

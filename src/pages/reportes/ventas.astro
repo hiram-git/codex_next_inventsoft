@@ -57,6 +57,9 @@ const maxFacturado = Math.max(...resumenMensual.map(m => m.facturado), 1);
       >
         <span class="material-icons-round">chevron_right</span>
       </a>
+      <a href={`/api/pdf/reporte?mes=${mes}&año=${año}`} class="btn btn-pdf">
+        <span class="material-icons-round" style="font-size:18px">picture_as_pdf</span> PDF
+      </a>
       <a href={`/reportes/ventas?mes=${mes}&año=${año}`} onclick="window.print();return false" class="btn btn-outline">
         <span class="material-icons-round" style="font-size:18px">print</span> Imprimir
       </a>
@@ -297,6 +300,8 @@ const maxFacturado = Math.max(...resumenMensual.map(m => m.facturado), 1);
   .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:var(--radius); font-size:0.875rem; font-weight:500; border:1px solid transparent; cursor:pointer; text-decoration:none; transition:all 0.2s; }
   .btn-outline { background:white; border-color:var(--border); color:var(--text); }
   .btn-outline:hover { background:#f8fafc; }
+  .btn-pdf { background:#dc2626; color:white; border-color:transparent; }
+  .btn-pdf:hover { background:#b91c1c; }
   .btn-icon { padding:6px; }
   .disabled { opacity:0.4; pointer-events:none; }
 

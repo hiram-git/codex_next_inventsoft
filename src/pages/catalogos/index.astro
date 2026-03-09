@@ -1,0 +1,251 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { store } from '../../lib/store';
+
+const tab = (Astro.url.searchParams.get('tab') ?? 'departamentos') as
+  'departamentos' | 'grupos' | 'marcas' | 'lineas';
+
+let mensaje = '';
+let tipoMensaje = 'success';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action  = form.get('action')?.toString()  ?? '';
+  const catalog = form.get('catalog')?.toString() ?? '';
+  const id      = parseInt(form.get('id')?.toString() ?? '0');
+  const nombre  = form.get('nombre')?.toString()  ?? '';
+  const desc    = form.get('descripcion')?.toString() ?? '';
+  const activo  = form.get('activo') !== 'false';
+
+  try {
+    if (catalog === 'departamentos') {
+      if (action === 'create') await store.createDepartamento({ nombre, descripcion: desc });
+      else if (action === 'update') await store.updateDepartamento(id, { nombre, descripcion: desc, activo });
+      else if (action === 'delete') await store.deleteDepartamento(id);
+    } else if (catalog === 'grupos') {
+      if (action === 'create') await store.createGrupo({ nombre, descripcion: desc });
+      else if (action === 'update') await store.updateGrupo(id, { nombre, descripcion: desc, activo });
+      else if (action === 'delete') await store.deleteGrupo(id);
+    } else if (catalog === 'marcas') {
+      if (action === 'create') await store.createMarca({ nombre, descripcion: desc });
+      else if (action === 'update') await store.updateMarca(id, { nombre, descripcion: desc, activo });
+      else if (action === 'delete') await store.deleteMarca(id);
+    } else if (catalog === 'lineas') {
+      if (action === 'create') await store.createLinea({ nombre, descripcion: desc });
+      else if (action === 'update') await store.updateLinea(id, { nombre, descripcion: desc, activo });
+      else if (action === 'delete') await store.deleteLinea(id);
+    }
+    mensaje = action === 'delete' ? 'Registro eliminado.' :
+              action === 'create' ? 'Registro creado.' : 'Registro actualizado.';
+  } catch (e: any) {
+    mensaje = e.message ?? 'Error al guardar.';
+    tipoMensaje = 'error';
+  }
+  return Astro.redirect(`/catalogos?tab=${catalog}`);
+}
+
+const [departamentos, grupos, marcas, lineas] = await Promise.all([
+  store.getDepartamentos(),
+  store.getGrupos(),
+  store.getMarcas(),
+  store.getLineas(),
+]);
+
+const tabs = [
+  { id: 'departamentos', label: 'Departamentos', icon: 'category',   data: departamentos },
+  { id: 'grupos',        label: 'Grupos',        icon: 'workspaces', data: grupos },
+  { id: 'marcas',        label: 'Marcas',        icon: 'sell',       data: marcas },
+  { id: 'lineas',        label: 'Líneas',         icon: 'reorder',    data: lineas },
+] as const;
+
+const activeData = tabs.find(t => t.id === tab)?.data ?? [];
+---
+
+<AdminLayout title="Catálogos">
+  <div class="page-header">
+    <h1>Catálogos</h1>
+    <p class="subtitle">Clasificadores para productos y servicios</p>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    {tabs.map(t => (
+      <a href={`/catalogos?tab=${t.id}`}
+         class:list={['tab', { active: tab === t.id }]}>
+        <span class="material-icons-round">{t.icon}</span>
+        {t.label}
+        <span class="tab-count">{t.data.length}</span>
+      </a>
+    ))}
+  </div>
+
+  <div class="layout">
+    <!-- List -->
+    <div class="card">
+      <div class="card-header">
+        <h2>{tabs.find(t => t.id === tab)?.label}</h2>
+        <button class="btn btn-primary btn-sm" onclick="openCreate()">
+          <span class="material-icons-round" style="font-size:16px">add</span> Nuevo
+        </button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Nombre</th>
+            <th>Descripción</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {(activeData as any[]).map((row: any) => (
+            <tr>
+              <td style="color:var(--text-muted);font-size:0.8rem">{row.id}</td>
+              <td><strong>{row.nombre}</strong></td>
+              <td style="color:var(--text-muted);font-size:0.85rem">{row.descripcion || '—'}</td>
+              <td>
+                <span class:list={['badge', row.activo ? 'badge-success' : 'badge-secondary']}>
+                  {row.activo ? 'Activo' : 'Inactivo'}
+                </span>
+              </td>
+              <td>
+                <div style="display:flex;gap:4px">
+                  <button class="btn btn-sm btn-outline"
+                    onclick={`openEdit(${row.id},'${row.nombre.replace(/'/g,"\\'")}','${(row.descripcion||'').replace(/'/g,"\\'")}',${row.activo})`}>
+                    <span class="material-icons-round" style="font-size:14px">edit</span>
+                  </button>
+                  <form method="POST" style="display:inline" onsubmit="return confirm('¿Eliminar este registro?')">
+                    <input type="hidden" name="catalog" value={tab} />
+                    <input type="hidden" name="action"  value="delete" />
+                    <input type="hidden" name="id"      value={row.id} />
+                    <button type="submit" class="btn btn-sm btn-danger">
+                      <span class="material-icons-round" style="font-size:14px">delete</span>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          ))}
+          {activeData.length === 0 && (
+            <tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px">
+              Sin registros. Haz clic en <strong>Nuevo</strong> para agregar el primero.
+            </td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Sidebar form -->
+    <div class="side-form card" id="formPanel" style="display:none">
+      <h2 id="formTitle">Nuevo registro</h2>
+      <form method="POST" id="catalogForm">
+        <input type="hidden" name="catalog" value={tab} />
+        <input type="hidden" name="action"  id="formAction" value="create" />
+        <input type="hidden" name="id"      id="formId" value="" />
+        <div class="form-group">
+          <label>Nombre <span style="color:red">*</span></label>
+          <input type="text" name="nombre" id="formNombre" class="form-control" required />
+        </div>
+        <div class="form-group">
+          <label>Descripción</label>
+          <textarea name="descripcion" id="formDesc" class="form-control" rows="2"></textarea>
+        </div>
+        <div class="form-group" id="grupoActivo" style="display:none">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="hidden"   name="activo" value="false" />
+            <input type="checkbox" id="formActivo" onchange="this.previousElementSibling.value=this.checked?'true':'false'" />
+            Activo
+          </label>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+          <button type="button" class="btn btn-secondary" onclick="closeForm()">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</AdminLayout>
+
+<style>
+  .page-header { margin-bottom: 20px; }
+  h1 { font-size: 1.5rem; font-weight: 700; margin: 0 0 4px; }
+  .subtitle { color: var(--text-muted); font-size: 0.875rem; margin: 0; }
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 2px solid var(--border); padding-bottom: 0; }
+  .tab { display: flex; align-items: center; gap: 6px; padding: 10px 16px; font-size: 0.875rem; font-weight: 500;
+    color: var(--text-muted); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -2px;
+    border-radius: var(--radius) var(--radius) 0 0; transition: all .15s; }
+  .tab:hover { color: var(--text); background: var(--bg); }
+  .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .tab-count { background: var(--bg); color: var(--text-muted); font-size: 0.72rem; padding: 1px 6px;
+    border-radius: 10px; font-weight: 600; }
+  .tab.active .tab-count { background: #eff6ff; color: var(--primary); }
+
+  .layout { display: grid; grid-template-columns: 1fr 320px; gap: 16px; align-items: start; }
+  .card { background: white; border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+  .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  h2 { font-size: 1rem; font-weight: 600; margin: 0 0 16px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #f8fafc; padding: 8px 12px; text-align: left; font-size: 0.72rem; text-transform: uppercase;
+    letter-spacing: .05em; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 0.875rem; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #f8fafc; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.72rem; font-weight: 600; }
+  .badge-success  { background: #dcfce7; color: #16a34a; }
+  .badge-secondary{ background: #f1f5f9; color: #64748b; }
+
+  .btn { display: inline-flex; align-items: center; gap: 4px; padding: 8px 14px; border-radius: var(--radius);
+    font-size: 0.875rem; font-weight: 500; border: 1px solid transparent; cursor: pointer; text-decoration: none; transition: all .2s; }
+  .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+  .btn-primary  { background: var(--primary); color: white; }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-secondary{ background: white; border-color: var(--border); color: var(--text); }
+  .btn-secondary:hover { background: #f8fafc; }
+  .btn-outline  { background: white; border-color: var(--border); color: var(--text); }
+  .btn-outline:hover { background: #f8fafc; }
+  .btn-danger   { background: var(--danger); color: white; }
+  .btn-danger:hover { background: #b91c1c; }
+
+  .side-form h2 { margin-bottom: 16px; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
+  .form-group label { font-weight: 500; font-size: 0.875rem; }
+  .form-control { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px;
+    font-size: 0.875rem; width: 100%; box-sizing: border-box; }
+  .form-control:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+
+  @media (max-width: 700px) {
+    .layout { grid-template-columns: 1fr; }
+    .tabs { overflow-x: auto; }
+  }
+</style>
+
+<script is:inline>
+function openCreate() {
+  document.getElementById('formTitle').textContent = 'Nuevo registro';
+  document.getElementById('formAction').value = 'create';
+  document.getElementById('formId').value = '';
+  document.getElementById('formNombre').value = '';
+  document.getElementById('formDesc').value = '';
+  document.getElementById('grupoActivo').style.display = 'none';
+  document.getElementById('formPanel').style.display = '';
+}
+function openEdit(id, nombre, desc, activo) {
+  document.getElementById('formTitle').textContent = 'Editar registro';
+  document.getElementById('formAction').value = 'update';
+  document.getElementById('formId').value = id;
+  document.getElementById('formNombre').value = nombre;
+  document.getElementById('formDesc').value = desc;
+  const cb = document.getElementById('formActivo');
+  cb.checked = activo;
+  cb.previousElementSibling.value = activo ? 'true' : 'false';
+  document.getElementById('grupoActivo').style.display = '';
+  document.getElementById('formPanel').style.display = '';
+}
+function closeForm() {
+  document.getElementById('formPanel').style.display = 'none';
+}
+</script>

@@ -2,38 +2,23 @@
 import AdminLayout from '../../layouts/AdminLayout.astro';
 import { store } from '../../lib/store';
 
-let mensaje = '';
-let tipoMensaje = '';
-
 if (Astro.request.method === 'POST') {
   const formData = await Astro.request.formData();
   const action = formData.get('_action')?.toString();
 
-  if (action === 'create' || action === 'update') {
-    const data = {
-      nombre: formData.get('nombre')?.toString() ?? '',
-      descripcion: formData.get('descripcion')?.toString() ?? '',
-      precio: parseFloat(formData.get('precio')?.toString() ?? '0'),
-      categoria: formData.get('categoria')?.toString() ?? '',
-      activo: formData.get('activo') === 'on',
-    };
+  if (action === 'create') {
+    return Astro.redirect('/servicios/nuevo');
+  }
 
-    if (action === 'create') {
-      await store.createServicio(data);
-      mensaje = 'Servicio creado exitosamente.';
-    } else {
-      const id = formData.get('id')?.toString() ?? '';
-      await store.updateServicio(id, data);
-      mensaje = 'Servicio actualizado exitosamente.';
-    }
-    tipoMensaje = 'success';
+  if (action === 'update') {
+    const id = formData.get('id')?.toString() ?? '';
+    return Astro.redirect(`/servicios/${id}/editar`);
   }
 
   if (action === 'delete') {
     const id = formData.get('id')?.toString() ?? '';
     await store.deleteServicio(id);
-    mensaje = 'Servicio eliminado.';
-    tipoMensaje = 'success';
+    return Astro.redirect('/servicios');
   }
 }
 
@@ -42,25 +27,20 @@ const servicios = await store.getServicios();
 
 <AdminLayout title="Servicios">
   <div class="page-header">
-    <h1>Servicios</h1>
-    <button class="btn btn-primary" onclick="document.getElementById('modalCrear').style.display='flex'">
+    <h1><span class="material-icons-round">miscellaneous_services</span> Servicios</h1>
+    <a href="/servicios/nuevo" class="btn btn-primary">
       <span class="material-icons-round">add</span> Nuevo Servicio
-    </button>
+    </a>
   </div>
 
-  <div class="alert" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;margin-bottom:16px;font-size:0.875rem">
-    <span class="material-icons-round" style="font-size:16px;vertical-align:middle">info</span>
-    Los servicios <strong>no generan movimientos de inventario</strong>. Se pueden incluir en facturas junto con productos.
-  </div>
-
-  {mensaje && <div class={`alert alert-${tipoMensaje}`}>{mensaje}</div>}
-
-  <div class="card">
-    <table>
+  <div class="section-card">
+    <table class="data-table">
       <thead>
         <tr>
+          <th>Código</th>
           <th>Nombre</th>
-          <th>Categoría</th>
+          <th>Marca</th>
+          <th>Grupo</th>
           <th>Precio</th>
           <th>Estado</th>
           <th>Acciones</th>
@@ -68,26 +48,25 @@ const servicios = await store.getServicios();
       </thead>
       <tbody>
         {servicios.map(s => (
-          <tr>
+          <tr class="clickable-row" onclick={`window.location='/servicios/${s.id}/editar'`}>
+            <td><code style="font-size:0.8rem">{s.codigo || '—'}</code></td>
             <td>
-              <div>
-                <strong>{s.nombre}</strong>
-                <div style="font-size:0.8rem;color:var(--text-muted)">{s.descripcion}</div>
-              </div>
+              <strong>{s.nombre}</strong>
+              {s.referencia && <div style="font-size:0.78rem;color:var(--text-muted)">Ref: {s.referencia}</div>}
             </td>
-            <td>{s.categoria || '—'}</td>
+            <td>{s.marca || '—'}</td>
+            <td>{s.grupo || '—'}</td>
             <td>${s.precio.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
             <td>
               <span class:list={['badge', s.activo ? 'badge-success' : 'badge-danger']}>
                 {s.activo ? 'Activo' : 'Inactivo'}
               </span>
             </td>
-            <td>
+            <td onclick="event.stopPropagation()">
               <div style="display:flex;gap:4px;">
-                <button class="btn btn-primary btn-sm"
-                  onclick={`openEdit('${s.id}','${s.nombre}','${s.descripcion}',${s.precio},'${s.categoria}',${s.activo})`}>
+                <a href={`/servicios/${s.id}/editar`} class="btn btn-secondary btn-sm">
                   <span class="material-icons-round" style="font-size:16px">edit</span>
-                </button>
+                </a>
                 <form method="POST" style="display:inline" onsubmit="return confirm('¿Eliminar este servicio?')">
                   <input type="hidden" name="_action" value="delete" />
                   <input type="hidden" name="id" value={s.id} />
@@ -100,96 +79,36 @@ const servicios = await store.getServicios();
           </tr>
         ))}
         {servicios.length === 0 && (
-          <tr><td colspan="5" style="text-align:center;color:var(--text-muted)">No hay servicios registrados.</td></tr>
+          <tr>
+            <td colspan="7" style="text-align:center;color:var(--text-muted);padding:32px">
+              No hay servicios registrados.
+            </td>
+          </tr>
         )}
       </tbody>
     </table>
   </div>
-
-  <!-- Modal Crear -->
-  <div class="modal-overlay" id="modalCrear" style="display:none">
-    <div class="modal">
-      <h2>Nuevo Servicio</h2>
-      <form method="POST">
-        <input type="hidden" name="_action" value="create" />
-        <div class="form-group">
-          <label>Nombre</label>
-          <input type="text" name="nombre" class="form-control" required />
-        </div>
-        <div class="form-group">
-          <label>Descripción</label>
-          <textarea name="descripcion" class="form-control" rows="2"></textarea>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div class="form-group">
-            <label>Precio</label>
-            <input type="number" name="precio" class="form-control" step="0.01" min="0" required />
-          </div>
-          <div class="form-group">
-            <label>Categoría</label>
-            <input type="text" name="categoria" class="form-control" />
-          </div>
-        </div>
-        <div class="form-group">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="checkbox" name="activo" checked /> Activo
-          </label>
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalCrear').style.display='none'">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Crear</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Modal Editar -->
-  <div class="modal-overlay" id="modalEditar" style="display:none">
-    <div class="modal">
-      <h2>Editar Servicio</h2>
-      <form method="POST">
-        <input type="hidden" name="_action" value="update" />
-        <input type="hidden" name="id" id="editId" />
-        <div class="form-group">
-          <label>Nombre</label>
-          <input type="text" name="nombre" id="editNombre" class="form-control" required />
-        </div>
-        <div class="form-group">
-          <label>Descripción</label>
-          <textarea name="descripcion" id="editDescripcion" class="form-control" rows="2"></textarea>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div class="form-group">
-            <label>Precio</label>
-            <input type="number" name="precio" id="editPrecio" class="form-control" step="0.01" min="0" required />
-          </div>
-          <div class="form-group">
-            <label>Categoría</label>
-            <input type="text" name="categoria" id="editCategoria" class="form-control" />
-          </div>
-        </div>
-        <div class="form-group">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="checkbox" name="activo" id="editActivo" /> Activo
-          </label>
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalEditar').style.display='none'">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Guardar</button>
-        </div>
-      </form>
-    </div>
-  </div>
 </AdminLayout>
 
-<script is:inline>
-  function openEdit(id, nombre, descripcion, precio, categoria, activo) {
-    document.getElementById('editId').value = id;
-    document.getElementById('editNombre').value = nombre;
-    document.getElementById('editDescripcion').value = descripcion;
-    document.getElementById('editPrecio').value = precio;
-    document.getElementById('editCategoria').value = categoria;
-    document.getElementById('editActivo').checked = activo;
-    document.getElementById('modalEditar').style.display = 'flex';
-  }
-</script>
+<style>
+  .page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }
+  h1 { font-size:1.5rem; font-weight:700; margin:0; display:flex; align-items:center; gap:8px; }
+  .section-card { background:white; border:1px solid var(--border); border-radius:var(--radius); padding:0; margin-bottom:20px; overflow:hidden; }
+  .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:var(--radius); font-size:0.875rem; font-weight:500; border:1px solid transparent; cursor:pointer; text-decoration:none; transition:all .2s; }
+  .btn-primary { background:var(--primary); color:white; }
+  .btn-primary:hover { background:var(--primary-dark); }
+  .btn-secondary { background:white; border-color:var(--border); color:var(--text); }
+  .btn-secondary:hover { background:#f8fafc; }
+  .btn-danger { background:var(--danger); color:white; }
+  .btn-danger:hover { background:#b91c1c; }
+  .btn-sm { padding:4px 10px; font-size:0.8rem; }
+  .data-table { width:100%; border-collapse:collapse; }
+  .data-table th { background:#f8fafc; padding:10px 16px; text-align:left; font-size:0.75rem; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); border-bottom:1px solid var(--border); }
+  .data-table td { padding:10px 16px; border-bottom:1px solid var(--border); font-size:0.875rem; vertical-align:middle; }
+  .data-table tbody tr:last-child td { border-bottom:none; }
+  .data-table tbody tr.clickable-row { cursor:pointer; }
+  .data-table tbody tr.clickable-row:hover { background:#f8fafc; }
+  .badge { display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; font-size:0.75rem; font-weight:500; }
+  .badge-success { background:#dcfce7; color:#16a34a; }
+  .badge-danger { background:#fee2e2; color:#dc2626; }
+</style>

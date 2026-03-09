@@ -37,14 +37,102 @@ export const clientes = pgTable('clientes', {
   createdAt: date('created_at').defaultNow().notNull(),
 });
 
+// --- Catálogos auxiliares ---
+export const departamentos = pgTable('departamentos', {
+  id: serial('id').primaryKey(),
+  nombre: varchar('nombre', { length: 200 }).notNull(),
+  descripcion: text('descripcion').default(''),
+  activo: boolean('activo').default(true).notNull(),
+});
+
+export const grupos = pgTable('grupos', {
+  id: serial('id').primaryKey(),
+  nombre: varchar('nombre', { length: 200 }).notNull(),
+  descripcion: text('descripcion').default(''),
+  activo: boolean('activo').default(true).notNull(),
+});
+
+export const marcas = pgTable('marcas', {
+  id: serial('id').primaryKey(),
+  nombre: varchar('nombre', { length: 200 }).notNull(),
+  descripcion: text('descripcion').default(''),
+  activo: boolean('activo').default(true).notNull(),
+});
+
+export const lineas = pgTable('lineas', {
+  id: serial('id').primaryKey(),
+  nombre: varchar('nombre', { length: 200 }).notNull(),
+  descripcion: text('descripcion').default(''),
+  activo: boolean('activo').default(true).notNull(),
+});
+
+type PrecioNivel = { precio: number; utilidad: number; precioConImpuesto: number };
+
 // --- Productos ---
 export const productos = pgTable('productos', {
   id: serial('id').primaryKey(),
-  nombre: varchar('nombre', { length: 300 }).notNull(),
-  descripcion: text('descripcion').default(''),
-  precio: numeric('precio', { precision: 12, scale: 2 }).notNull(),
-  stock: integer('stock').default(0).notNull(),
-  categoria: varchar('categoria', { length: 100 }).default(''),
+  // Identificación
+  codigo:     varchar('codigo',    { length: 100 }).default(''),
+  referencia: varchar('referencia',{ length: 100 }).default(''),
+  nombre:     varchar('nombre',    { length: 300 }).notNull(),
+  // Descripciones
+  descripcion:        text('descripcion').default(''),
+  caracteristicas:    text('caracteristicas').default(''),
+  descripcionIngles:  text('descripcion_ingles').default(''),
+  descripcion2:       text('descripcion2').default(''),
+  descripcion3:       text('descripcion3').default(''),
+  // Clasificación (FK por nombre guardado para independencia)
+  departamentoId: integer('departamento_id'),
+  departamento:   varchar('departamento',  { length: 200 }).default(''),
+  grupoId:        integer('grupo_id'),
+  grupo:          varchar('grupo',         { length: 200 }).default(''),
+  marcaId:        integer('marca_id'),
+  marca:          varchar('marca',         { length: 200 }).default(''),
+  lineaId:        integer('linea_id'),
+  linea:          varchar('linea',         { length: 200 }).default(''),
+  categoria:      varchar('categoria',     { length: 100 }).default(''), // campo legado
+  // Costos y precios
+  costo:   numeric('costo',   { precision: 12, scale: 2 }).default('0'),
+  precio:  numeric('precio',  { precision: 12, scale: 2 }).notNull(),   // precio base (= precioA.precio)
+  precioA: jsonb('precio_a').$type<PrecioNivel>(),
+  precioB: jsonb('precio_b').$type<PrecioNivel>(),
+  precioC: jsonb('precio_c').$type<PrecioNivel>(),
+  // Inventario
+  stock:              integer('stock').default(0).notNull(),
+  minimoInventario:   numeric('minimo_inventario', { precision: 12, scale: 2 }).default('0'),
+  maximoInventario:   numeric('maximo_inventario', { precision: 12, scale: 2 }).default('0'),
+  activo: boolean('activo').default(true).notNull(),
+});
+
+// --- Servicios (no mueven inventario) ---
+export const servicios = pgTable('servicios', {
+  id: serial('id').primaryKey(),
+  // Identificación
+  codigo:     varchar('codigo',    { length: 100 }).default(''),
+  referencia: varchar('referencia',{ length: 100 }).default(''),
+  nombre:     varchar('nombre',    { length: 300 }).notNull(),
+  // Descripciones
+  descripcion:        text('descripcion').default(''),
+  caracteristicas:    text('caracteristicas').default(''),
+  descripcionIngles:  text('descripcion_ingles').default(''),
+  descripcion2:       text('descripcion2').default(''),
+  descripcion3:       text('descripcion3').default(''),
+  // Clasificación
+  departamentoId: integer('departamento_id'),
+  departamento:   varchar('departamento',  { length: 200 }).default(''),
+  grupoId:        integer('grupo_id'),
+  grupo:          varchar('grupo',         { length: 200 }).default(''),
+  marcaId:        integer('marca_id'),
+  marca:          varchar('marca',         { length: 200 }).default(''),
+  lineaId:        integer('linea_id'),
+  linea:          varchar('linea',         { length: 200 }).default(''),
+  categoria:      varchar('categoria',     { length: 100 }).default(''),
+  // Costos y precios
+  costo:   numeric('costo',  { precision: 12, scale: 2 }).default('0'),
+  precio:  numeric('precio', { precision: 12, scale: 2 }).notNull(),
+  precioA: jsonb('precio_a').$type<PrecioNivel>(),
+  precioB: jsonb('precio_b').$type<PrecioNivel>(),
+  precioC: jsonb('precio_c').$type<PrecioNivel>(),
   activo: boolean('activo').default(true).notNull(),
 });
 
@@ -191,15 +279,6 @@ export const pedidos = pgTable('pedidos', {
   fecha: date('fecha').defaultNow().notNull(),
 });
 
-// --- Servicios (no mueven inventario) ---
-export const servicios = pgTable('servicios', {
-  id: serial('id').primaryKey(),
-  nombre: varchar('nombre', { length: 300 }).notNull(),
-  descripcion: text('descripcion').default(''),
-  precio: numeric('precio', { precision: 12, scale: 2 }).notNull(),
-  categoria: varchar('categoria', { length: 100 }).default(''),
-  activo: boolean('activo').default(true).notNull(),
-});
 
 // --- Notas de Crédito (anulación de facturas) ---
 export const notasCredito = pgTable('notas_credito', {

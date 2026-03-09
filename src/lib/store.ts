@@ -19,6 +19,10 @@ export type Servicio = typeof schema.servicios.$inferSelect;
 export type NotaCredito = typeof schema.notasCredito.$inferSelect;
 export type Cobro = typeof schema.cobros.$inferSelect;
 export type Cotizacion = typeof schema.cotizaciones.$inferSelect;
+export type Departamento = typeof schema.departamentos.$inferSelect;
+export type Grupo = typeof schema.grupos.$inferSelect;
+export type Marca = typeof schema.marcas.$inferSelect;
+export type Linea = typeof schema.lineas.$inferSelect;
 
 // Helper: numeric columns come back as strings from pg, convert to number
 function num(v: string | number | null): number {
@@ -42,16 +46,35 @@ function normalizeFactura(row: Factura) {
   };
 }
 
+function normalizePrecioNivel(v: any) {
+  if (!v) return null;
+  return { precio: num(v.precio), utilidad: num(v.utilidad), precioConImpuesto: num(v.precioConImpuesto) };
+}
+
 function normalizeProducto(row: Producto) {
   return {
     ...row,
     id: String(row.id),
     precio: num(row.precio),
+    costo: num(row.costo),
+    minimoInventario: num(row.minimoInventario),
+    maximoInventario: num(row.maximoInventario),
+    precioA: normalizePrecioNivel(row.precioA),
+    precioB: normalizePrecioNivel(row.precioB),
+    precioC: normalizePrecioNivel(row.precioC),
   };
 }
 
 function normalizeServicio(row: Servicio) {
-  return { ...row, id: String(row.id), precio: num(row.precio) };
+  return {
+    ...row,
+    id: String(row.id),
+    precio: num(row.precio),
+    costo: num(row.costo),
+    precioA: normalizePrecioNivel(row.precioA),
+    precioB: normalizePrecioNivel(row.precioB),
+    precioC: normalizePrecioNivel(row.precioC),
+  };
 }
 
 function normalizeNotaCredito(row: NotaCredito) {
@@ -190,9 +213,62 @@ export const store = {
     return rows.length > 0;
   },
 
+  // --- Catálogos auxiliares ---
+  async getDepartamentos() { return db.select().from(schema.departamentos).orderBy(schema.departamentos.nombre); },
+  async createDepartamento(data: { nombre: string; descripcion?: string }) {
+    const rows = await db.insert(schema.departamentos).values({ nombre: data.nombre, descripcion: data.descripcion ?? '' }).returning();
+    return rows[0];
+  },
+  async updateDepartamento(id: number, data: { nombre: string; descripcion?: string; activo?: boolean }) {
+    const rows = await db.update(schema.departamentos).set(data).where(eq(schema.departamentos.id, id)).returning();
+    return rows[0];
+  },
+  async deleteDepartamento(id: number) {
+    await db.delete(schema.departamentos).where(eq(schema.departamentos.id, id));
+  },
+
+  async getGrupos() { return db.select().from(schema.grupos).orderBy(schema.grupos.nombre); },
+  async createGrupo(data: { nombre: string; descripcion?: string }) {
+    const rows = await db.insert(schema.grupos).values({ nombre: data.nombre, descripcion: data.descripcion ?? '' }).returning();
+    return rows[0];
+  },
+  async updateGrupo(id: number, data: { nombre: string; descripcion?: string; activo?: boolean }) {
+    const rows = await db.update(schema.grupos).set(data).where(eq(schema.grupos.id, id)).returning();
+    return rows[0];
+  },
+  async deleteGrupo(id: number) {
+    await db.delete(schema.grupos).where(eq(schema.grupos.id, id));
+  },
+
+  async getMarcas() { return db.select().from(schema.marcas).orderBy(schema.marcas.nombre); },
+  async createMarca(data: { nombre: string; descripcion?: string }) {
+    const rows = await db.insert(schema.marcas).values({ nombre: data.nombre, descripcion: data.descripcion ?? '' }).returning();
+    return rows[0];
+  },
+  async updateMarca(id: number, data: { nombre: string; descripcion?: string; activo?: boolean }) {
+    const rows = await db.update(schema.marcas).set(data).where(eq(schema.marcas.id, id)).returning();
+    return rows[0];
+  },
+  async deleteMarca(id: number) {
+    await db.delete(schema.marcas).where(eq(schema.marcas.id, id));
+  },
+
+  async getLineas() { return db.select().from(schema.lineas).orderBy(schema.lineas.nombre); },
+  async createLinea(data: { nombre: string; descripcion?: string }) {
+    const rows = await db.insert(schema.lineas).values({ nombre: data.nombre, descripcion: data.descripcion ?? '' }).returning();
+    return rows[0];
+  },
+  async updateLinea(id: number, data: { nombre: string; descripcion?: string; activo?: boolean }) {
+    const rows = await db.update(schema.lineas).set(data).where(eq(schema.lineas.id, id)).returning();
+    return rows[0];
+  },
+  async deleteLinea(id: number) {
+    await db.delete(schema.lineas).where(eq(schema.lineas.id, id));
+  },
+
   // --- Productos ---
   async getProductos() {
-    const rows = await db.select().from(schema.productos);
+    const rows = await db.select().from(schema.productos).orderBy(schema.productos.nombre);
     return rows.map(normalizeProducto);
   },
 
@@ -201,14 +277,20 @@ export const store = {
     return rows[0] ? normalizeProducto(rows[0]) : undefined;
   },
 
-  async createProducto(data: { nombre: string; descripcion: string; precio: number; stock: number; categoria: string; activo: boolean }) {
-    const rows = await db.insert(schema.productos).values({ ...data, precio: String(data.precio) }).returning();
+  async createProducto(data: Record<string, unknown>) {
+    const values: any = { ...data };
+    for (const k of ['precio', 'costo', 'minimoInventario', 'maximoInventario']) {
+      if (typeof values[k] === 'number') values[k] = String(values[k]);
+    }
+    const rows = await db.insert(schema.productos).values(values).returning();
     return normalizeProducto(rows[0]);
   },
 
   async updateProducto(id: string, data: Record<string, unknown>) {
-    const values = { ...data };
-    if (typeof values.precio === 'number') values.precio = String(values.precio);
+    const values: any = { ...data };
+    for (const k of ['precio', 'costo', 'minimoInventario', 'maximoInventario']) {
+      if (typeof values[k] === 'number') values[k] = String(values[k]);
+    }
     const rows = await db.update(schema.productos).set(values).where(eq(schema.productos.id, Number(id))).returning();
     return rows[0] ? normalizeProducto(rows[0]) : null;
   },
@@ -711,14 +793,20 @@ export const store = {
     return rows[0] ? normalizeServicio(rows[0]) : undefined;
   },
 
-  async createServicio(data: { nombre: string; descripcion: string; precio: number; categoria: string; activo: boolean }) {
-    const rows = await db.insert(schema.servicios).values({ ...data, precio: String(data.precio) }).returning();
+  async createServicio(data: Record<string, unknown>) {
+    const values: any = { ...data };
+    for (const k of ['precio', 'costo']) {
+      if (typeof values[k] === 'number') values[k] = String(values[k]);
+    }
+    const rows = await db.insert(schema.servicios).values(values).returning();
     return normalizeServicio(rows[0]);
   },
 
   async updateServicio(id: string, data: Record<string, unknown>) {
-    const values = { ...data };
-    if (typeof values.precio === 'number') values.precio = String(values.precio);
+    const values: any = { ...data };
+    for (const k of ['precio', 'costo']) {
+      if (typeof values[k] === 'number') values[k] = String(values[k]);
+    }
     const rows = await db.update(schema.servicios).set(values).where(eq(schema.servicios.id, Number(id))).returning();
     return rows[0] ? normalizeServicio(rows[0]) : null;
   },

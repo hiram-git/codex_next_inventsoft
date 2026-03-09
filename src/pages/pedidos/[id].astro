@@ -81,6 +81,9 @@ const estadoBadge: Record<string, string> = {
       <a href={`/api/pdf/pedido/${id}`} class="btn btn-pdf">
         <span class="material-icons-round" style="font-size:18px">picture_as_pdf</span> PDF
       </a>
+      <button class="btn btn-ticket" onclick={`ticketBtn(this,'/api/ticket/pedido/${id}')`}>
+        <span class="material-icons-round" style="font-size:18px">receipt_long</span> Ticket
+      </button>
       <a href={`/pedidos/${id}/imprimir`} target="_blank" class="btn btn-outline">
         <span class="material-icons-round" style="font-size:18px">print</span> Imprimir
       </a>
@@ -181,5 +184,29 @@ const estadoBadge: Record<string, string> = {
   .btn-outline:hover { background: #f8fafc; }
   .btn-pdf { background: #dc2626; color: white; border-color: transparent; }
   .btn-pdf:hover { background: #b91c1c; }
+  .btn-ticket { background: #0f766e; color: white; border-color: transparent; }
+  .btn-ticket:hover { background: #0d6460; }
+  .btn-ticket:disabled { opacity: .6; cursor: default; }
   @media (max-width: 768px) { .info-grid { grid-template-columns: 1fr 1fr; } }
 </style>
+
+<script>
+function ticketBtn(btn: HTMLButtonElement, url: string) {
+  btn.disabled = true;
+  const orig = btn.innerHTML;
+  btn.innerHTML = '<span class="material-icons-round" style="font-size:18px">autorenew</span> Imprimiendo...';
+  fetch(url, { method: 'POST' })
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) {
+        btn.innerHTML = '<span class="material-icons-round" style="font-size:18px">check</span> Impreso';
+        setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 2500);
+      } else {
+        alert('Error: ' + d.error);
+        btn.innerHTML = orig; btn.disabled = false;
+      }
+    })
+    .catch(() => { alert('No se pudo conectar con la impresora.'); btn.innerHTML = orig; btn.disabled = false; });
+}
+</script>
+

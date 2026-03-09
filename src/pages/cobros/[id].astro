@@ -35,10 +35,17 @@ const metodoPagoLabel: Record<string, string> = {
         {cobro.estado === 'aplicado' ? 'Aplicado' : 'Anulado'}
       </span>
     </div>
-    <a href="/cobros" class="btn btn-outline">
-      <span class="material-icons-round">arrow_back</span>
-      Volver
-    </a>
+    <div style="display:flex;gap:8px">
+      {cobro.estado === 'aplicado' && (
+        <button class="btn btn-ticket" onclick={`ticketBtn(this,'/api/ticket/cobro/${id}')`}>
+          <span class="material-icons-round" style="font-size:18px">receipt_long</span> Ticket
+        </button>
+      )}
+      <a href="/cobros" class="btn btn-outline">
+        <span class="material-icons-round">arrow_back</span>
+        Volver
+      </a>
+    </div>
   </div>
 
   {error && (
@@ -181,6 +188,9 @@ const metodoPagoLabel: Record<string, string> = {
   .btn-outline:hover { background: #f8fafc; }
   .btn-danger { background: var(--danger); color: white; }
   .btn-danger:hover { background: #b91c1c; }
+  .btn-ticket { background: #0f766e; color: white; border-color: transparent; }
+  .btn-ticket:hover { background: #0d6460; }
+  .btn-ticket:disabled { opacity: .6; cursor: default; }
   dialog { border: none; border-radius: var(--radius); box-shadow: 0 10px 40px rgba(0,0,0,0.2); padding: 0; max-width: 440px; width: 90%; }
   dialog::backdrop { background: rgba(0,0,0,0.4); }
   .modal-content { padding: 28px; }
@@ -188,3 +198,23 @@ const metodoPagoLabel: Record<string, string> = {
   .modal-content p { margin: 0 0 20px; font-size: 0.875rem; color: var(--text-muted); }
   .modal-actions { display: flex; justify-content: flex-end; gap: 12px; }
 </style>
+
+<script>
+function ticketBtn(btn: HTMLButtonElement, url: string) {
+  btn.disabled = true;
+  const orig = btn.innerHTML;
+  btn.innerHTML = '<span class="material-icons-round" style="font-size:18px">autorenew</span> Imprimiendo...';
+  fetch(url, { method: 'POST' })
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) {
+        btn.innerHTML = '<span class="material-icons-round" style="font-size:18px">check</span> Impreso';
+        setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 2500);
+      } else {
+        alert('Error: ' + d.error);
+        btn.innerHTML = orig; btn.disabled = false;
+      }
+    })
+    .catch(() => { alert('No se pudo conectar con la impresora.'); btn.innerHTML = orig; btn.disabled = false; });
+}
+</script>

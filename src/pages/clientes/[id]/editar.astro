@@ -1,0 +1,231 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { store } from '../../../lib/store';
+
+const { id } = Astro.params;
+const cliente = await store.getCliente(id!);
+if (!cliente) return Astro.redirect('/clientes');
+
+if (Astro.request.method === 'POST') {
+  const f = await Astro.request.formData();
+  const g = (k: string) => f.get(k)?.toString() ?? '';
+  const data: Record<string, unknown> = {
+    nombre:           g('nombre'),
+    email:            g('email'),
+    telefono:         g('telefono'),
+    direccion:        g('direccion'),
+    tipoClienteId:    g('tipoClienteId') ? Number(g('tipoClienteId')) : null,
+    tipoCliente:      g('tipoCliente'),
+    contribuyente:    g('contribuyente'),
+    ruc:              g('ruc'),
+    digitoVerificador:g('digitoVerificador'),
+    razonSocial:      g('razonSocial'),
+    nombreComercial:  g('nombreComercial'),
+    permiteCredito:   f.get('permiteCredito') === '1',
+    limiteCredito:    g('limiteCredito') || '0',
+    diaVencimiento:   g('diaVencimiento') ? Number(g('diaVencimiento')) : 30,
+    descuentoParcial: g('descuentoParcial') || '0',
+    descuentoGlobal:  g('descuentoGlobal') || '0',
+    vendedorId:       g('vendedorId') ? Number(g('vendedorId')) : null,
+    vendedor:         g('vendedor'),
+  };
+  await store.updateCliente(id!, data);
+  return Astro.redirect('/clientes');
+}
+
+const [tiposCliente, vendedores] = await Promise.all([
+  store.getTiposCliente(),
+  store.getVendedores(),
+]);
+---
+
+<AdminLayout title={`Editar Cliente: ${cliente.nombre}`}>
+  <div class="page-header">
+    <h1>Editar Cliente</h1>
+    <a href="/clientes" class="btn btn-secondary">
+      <span class="material-icons-round">arrow_back</span> Volver
+    </a>
+  </div>
+
+  <form method="POST" id="clienteForm">
+    <!-- Tabs -->
+    <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:24px;">
+      <button type="button" class="tab-btn active" data-tab="general" onclick="switchTab('general',this)">
+        <span class="material-icons-round" style="font-size:16px;vertical-align:middle">person</span>
+        Datos Generales
+      </button>
+      <button type="button" class="tab-btn" data-tab="admin" onclick="switchTab('admin',this)">
+        <span class="material-icons-round" style="font-size:16px;vertical-align:middle">admin_panel_settings</span>
+        Datos Administrativos
+      </button>
+    </div>
+
+    <!-- TAB: Datos Generales -->
+    <div id="tab-general">
+      <div class="card" style="margin-bottom:20px">
+        <h3 style="margin:0 0 16px">Identificación</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="form-group" style="grid-column:1/-1">
+            <label>Nombre *</label>
+            <input type="text" name="nombre" class="form-control" required value={cliente.nombre} />
+          </div>
+          <div class="form-group">
+            <label>Razón Social</label>
+            <input type="text" name="razonSocial" class="form-control" value={cliente.razonSocial ?? ''} />
+          </div>
+          <div class="form-group">
+            <label>Nombre Comercial</label>
+            <input type="text" name="nombreComercial" class="form-control" value={cliente.nombreComercial ?? ''} />
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" name="email" class="form-control" value={cliente.email ?? ''} />
+          </div>
+          <div class="form-group">
+            <label>Teléfono</label>
+            <input type="text" name="telefono" class="form-control" value={cliente.telefono ?? ''} />
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label>Dirección</label>
+            <textarea name="direccion" class="form-control" rows="2">{cliente.direccion ?? ''}</textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:20px">
+        <h3 style="margin:0 0 16px">Clasificación Fiscal</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="form-group">
+            <label>Tipo de Cliente</label>
+            <select name="tipoClienteId" class="form-control"
+              onchange="document.getElementById('hiddenTipoCliente').value = this.options[this.selectedIndex].dataset.nombre || ''">
+              <option value="">— Seleccionar —</option>
+              {tiposCliente.map(t => (
+                <option value={t.id} data-nombre={t.nombre} selected={cliente.tipoClienteId === t.id}>{t.nombre}</option>
+              ))}
+            </select>
+            <input type="hidden" name="tipoCliente" id="hiddenTipoCliente" value={cliente.tipoCliente ?? ''} />
+          </div>
+          <div class="form-group">
+            <label>Tipo de Contribuyente</label>
+            <select name="contribuyente" class="form-control">
+              <option value="">— N/A —</option>
+              <option value="juridico" selected={cliente.contribuyente === 'juridico'}>Jurídico</option>
+              <option value="natural" selected={cliente.contribuyente === 'natural'}>Natural</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>RUC</label>
+            <input type="text" name="ruc" class="form-control" value={cliente.ruc ?? ''} />
+          </div>
+          <div class="form-group">
+            <label>Dígito Verificador</label>
+            <input type="text" name="digitoVerificador" class="form-control" maxlength="5" value={cliente.digitoVerificador ?? ''} />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: Datos Administrativos -->
+    <div id="tab-admin" style="display:none">
+      <div class="card" style="margin-bottom:20px">
+        <h3 style="margin:0 0 16px">Crédito</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="form-group" style="grid-column:1/-1">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+              <input type="checkbox" name="permiteCredito" value="1" id="chkCredito"
+                checked={cliente.permiteCredito}
+                onchange="toggleCredito(this.checked)" style="width:18px;height:18px" />
+              <span>Permite Crédito</span>
+            </label>
+          </div>
+          <div id="creditoFields" style={`display:${cliente.permiteCredito ? 'block' : 'none'};grid-column:1/-1`}>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+              <div class="form-group">
+                <label>Límite de Crédito</label>
+                <input type="number" name="limiteCredito" class="form-control" min="0" step="0.01"
+                  value={cliente.limiteCredito ?? 0} />
+              </div>
+              <div class="form-group">
+                <label>Día Límite de Vencimiento (días)</label>
+                <input type="number" name="diaVencimiento" class="form-control" min="1" max="365"
+                  value={cliente.diaVencimiento ?? 30} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:20px">
+        <h3 style="margin:0 0 16px">Descuentos</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="form-group">
+            <label>Descuento Parcial (%)</label>
+            <input type="number" name="descuentoParcial" class="form-control" min="0" max="100" step="0.01"
+              value={cliente.descuentoParcial ?? 0} />
+          </div>
+          <div class="form-group">
+            <label>Descuento Global (%)</label>
+            <input type="number" name="descuentoGlobal" class="form-control" min="0" max="100" step="0.01"
+              value={cliente.descuentoGlobal ?? 0} />
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:20px">
+        <h3 style="margin:0 0 16px">Vendedor Asignado</h3>
+        <div class="form-group" style="max-width:400px">
+          <label>Vendedor</label>
+          <select name="vendedorId" class="form-control"
+            onchange="document.getElementById('hiddenVendedor').value = this.options[this.selectedIndex].dataset.nombre || ''">
+            <option value="">— Sin vendedor asignado —</option>
+            {vendedores.map(v => (
+              <option value={v.id} data-nombre={v.nombre} selected={cliente.vendedorId === v.id}>{v.nombre}</option>
+            ))}
+          </select>
+          <input type="hidden" name="vendedor" id="hiddenVendedor" value={cliente.vendedor ?? ''} />
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:8px">
+      <a href="/clientes" class="btn btn-secondary">Cancelar</a>
+      <button type="submit" class="btn btn-primary">
+        <span class="material-icons-round">save</span> Guardar Cambios
+      </button>
+    </div>
+  </form>
+</AdminLayout>
+
+<style>
+  .tab-btn {
+    padding: 10px 20px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--text-muted);
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tab-btn.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+    font-weight: 600;
+  }
+</style>
+
+<script is:inline>
+  function switchTab(tab, btn) {
+    document.querySelectorAll('[id^="tab-"]').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + tab).style.display = '';
+    btn.classList.add('active');
+  }
+  function toggleCredito(checked) {
+    document.getElementById('creditoFields').style.display = checked ? 'block' : 'none';
+  }
+</script>

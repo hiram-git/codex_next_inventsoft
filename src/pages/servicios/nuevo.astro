@@ -1,0 +1,301 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { store } from '../../lib/store';
+
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+
+  function parsePrecio(raw: string | null): any {
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch { return null; }
+  }
+
+  const codigo            = formData.get('codigo')?.toString() ?? '';
+  const referencia        = formData.get('referencia')?.toString() ?? '';
+  const nombre            = formData.get('nombre')?.toString() ?? '';
+  const descripcion       = formData.get('descripcion')?.toString() ?? '';
+  const caracteristicas   = formData.get('caracteristicas')?.toString() ?? '';
+  const descripcionIngles = formData.get('descripcionIngles')?.toString() ?? '';
+  const descripcion2      = formData.get('descripcion2')?.toString() ?? '';
+  const descripcion3      = formData.get('descripcion3')?.toString() ?? '';
+  const deptId            = formData.get('departamentoId')?.toString() ?? '';
+  const deptNombre        = formData.get('departamento')?.toString() ?? '';
+  const grupoId           = formData.get('grupoId')?.toString() ?? '';
+  const grupoNombre       = formData.get('grupo')?.toString() ?? '';
+  const marcaId           = formData.get('marcaId')?.toString() ?? '';
+  const marcaNombre       = formData.get('marca')?.toString() ?? '';
+  const lineaId           = formData.get('lineaId')?.toString() ?? '';
+  const lineaNombre       = formData.get('linea')?.toString() ?? '';
+  const costoStr          = formData.get('costo')?.toString() ?? '0';
+  const precioA           = parsePrecio(formData.get('precioA')?.toString() ?? '');
+  const precioB           = parsePrecio(formData.get('precioB')?.toString() ?? '');
+  const precioC           = parsePrecio(formData.get('precioC')?.toString() ?? '');
+
+  const data = {
+    codigo,
+    referencia,
+    nombre,
+    descripcion,
+    caracteristicas,
+    descripcionIngles,
+    descripcion2,
+    descripcion3,
+    departamentoId: deptId ? Number(deptId) : null,
+    departamento: deptNombre,
+    grupoId: grupoId ? Number(grupoId) : null,
+    grupo: grupoNombre,
+    marcaId: marcaId ? Number(marcaId) : null,
+    marca: marcaNombre,
+    lineaId: lineaId ? Number(lineaId) : null,
+    linea: lineaNombre,
+    costo: parseFloat(costoStr) || 0,
+    precio: precioA?.precio ?? 0,
+    precioA,
+    precioB,
+    precioC,
+    activo: formData.get('activo') === 'on',
+  };
+
+  await store.createServicio(data);
+  return Astro.redirect('/servicios');
+}
+
+const [departamentos, grupos, marcas, lineas] = await Promise.all([
+  store.getDepartamentos(),
+  store.getGrupos(),
+  store.getMarcas(),
+  store.getLineas(),
+]);
+---
+
+<AdminLayout title="Nuevo Servicio">
+  <div class="page-header">
+    <h1><span class="material-icons-round">add_box</span> Nuevo Servicio</h1>
+    <a href="/servicios" class="btn btn-secondary">
+      <span class="material-icons-round">arrow_back</span> Volver
+    </a>
+  </div>
+
+  <form method="POST" id="servicioForm">
+
+    <!-- Identificación -->
+    <div class="section-card">
+      <h2 class="section-title">
+        <span class="material-icons-round">badge</span> Identificación
+      </h2>
+      <div class="form-grid-3">
+        <div class="form-group">
+          <label>Código</label>
+          <input type="text" name="codigo" class="form-control" placeholder="SRV-001" />
+        </div>
+        <div class="form-group">
+          <label>Referencia</label>
+          <input type="text" name="referencia" class="form-control" />
+        </div>
+        <div class="form-group">
+          <label>Nombre <span style="color:var(--danger)">*</span></label>
+          <input type="text" name="nombre" class="form-control" required />
+        </div>
+      </div>
+    </div>
+
+    <!-- Descripciones -->
+    <div class="section-card">
+      <h2 class="section-title">
+        <span class="material-icons-round">description</span> Descripciones
+      </h2>
+      <div class="desc-tabs">
+        <button type="button" class="desc-tab active" onclick="showDesc('descripcion',this)">Español</button>
+        <button type="button" class="desc-tab" onclick="showDesc('descripcionIngles',this)">Inglés</button>
+        <button type="button" class="desc-tab" onclick="showDesc('descripcion2',this)">Desc. 2</button>
+        <button type="button" class="desc-tab" onclick="showDesc('descripcion3',this)">Desc. 3</button>
+        <button type="button" class="desc-tab" onclick="showDesc('caracteristicas',this)">Características</button>
+      </div>
+      <textarea name="descripcion"       id="tab_descripcion"       class="form-control desc-area" rows="4" placeholder="Descripción del servicio"></textarea>
+      <textarea name="descripcionIngles" id="tab_descripcionIngles" class="form-control desc-area" rows="4" placeholder="English description" style="display:none"></textarea>
+      <textarea name="descripcion2"      id="tab_descripcion2"      class="form-control desc-area" rows="4" placeholder="Descripción adicional 2" style="display:none"></textarea>
+      <textarea name="descripcion3"      id="tab_descripcion3"      class="form-control desc-area" rows="4" placeholder="Descripción adicional 3" style="display:none"></textarea>
+      <textarea name="caracteristicas"   id="tab_caracteristicas"   class="form-control desc-area" rows="4" placeholder="Características" style="display:none"></textarea>
+    </div>
+
+    <!-- Clasificación -->
+    <div class="section-card">
+      <h2 class="section-title">
+        <span class="material-icons-round">category</span> Clasificación
+      </h2>
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label>Departamento</label>
+          <select name="departamentoId" id="selDept" class="form-control"
+            onchange="document.getElementById('deptNombre').value = this.options[this.selectedIndex].dataset.nombre || ''">
+            <option value="">Sin clasificar</option>
+            {departamentos.map(d => (
+              <option value={d.id} data-nombre={d.nombre}>{d.nombre}</option>
+            ))}
+          </select>
+          <input type="hidden" name="departamento" id="deptNombre" />
+        </div>
+        <div class="form-group">
+          <label>Grupo</label>
+          <select name="grupoId" id="selGrupo" class="form-control"
+            onchange="document.getElementById('grupoNombre').value = this.options[this.selectedIndex].dataset.nombre || ''">
+            <option value="">Sin clasificar</option>
+            {grupos.map(g => (
+              <option value={g.id} data-nombre={g.nombre}>{g.nombre}</option>
+            ))}
+          </select>
+          <input type="hidden" name="grupo" id="grupoNombre" />
+        </div>
+        <div class="form-group">
+          <label>Marca</label>
+          <select name="marcaId" id="selMarca" class="form-control"
+            onchange="document.getElementById('marcaNombre').value = this.options[this.selectedIndex].dataset.nombre || ''">
+            <option value="">Sin clasificar</option>
+            {marcas.map(m => (
+              <option value={m.id} data-nombre={m.nombre}>{m.nombre}</option>
+            ))}
+          </select>
+          <input type="hidden" name="marca" id="marcaNombre" />
+        </div>
+        <div class="form-group">
+          <label>Línea</label>
+          <select name="lineaId" id="selLinea" class="form-control"
+            onchange="document.getElementById('lineaNombre').value = this.options[this.selectedIndex].dataset.nombre || ''">
+            <option value="">Sin clasificar</option>
+            {lineas.map(l => (
+              <option value={l.id} data-nombre={l.nombre}>{l.nombre}</option>
+            ))}
+          </select>
+          <input type="hidden" name="linea" id="lineaNombre" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Costos y Precios -->
+    <div class="section-card">
+      <h2 class="section-title">
+        <span class="material-icons-round">payments</span> Costos y Precios
+      </h2>
+      <div class="form-group" style="max-width:220px;margin-bottom:20px">
+        <label>Costo <small style="color:var(--text-muted)">(base para utilidad)</small></label>
+        <input type="number" id="costo" name="costo" class="form-control" step="0.01" min="0" value="0"
+          oninput="calcPrecio('A');calcPrecio('B');calcPrecio('C')" />
+      </div>
+
+      <input type="hidden" name="precioA" id="hiddenA" />
+      <input type="hidden" name="precioB" id="hiddenB" />
+      <input type="hidden" name="precioC" id="hiddenC" />
+
+      <table class="price-table">
+        <thead>
+          <tr>
+            <th style="width:90px">Lista</th>
+            <th>Precio (sin IVA)</th>
+            <th>Utilidad %</th>
+            <th>Precio + IVA 16%</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="price-label">Precio A</span></td>
+            <td><input type="number" id="precioA" class="form-control" step="0.01" min="0" value="0" oninput="calcPrecio('A')" /></td>
+            <td><input type="number" id="utilA" class="form-control" readonly value="0.00" /></td>
+            <td><input type="number" id="ivaPA" class="form-control" readonly value="0.00" /></td>
+          </tr>
+          <tr>
+            <td><span class="price-label">Precio B</span></td>
+            <td><input type="number" id="precioB" class="form-control" step="0.01" min="0" value="0" oninput="calcPrecio('B')" /></td>
+            <td><input type="number" id="utilB" class="form-control" readonly value="0.00" /></td>
+            <td><input type="number" id="ivaPB" class="form-control" readonly value="0.00" /></td>
+          </tr>
+          <tr>
+            <td><span class="price-label">Precio C</span></td>
+            <td><input type="number" id="precioC" class="form-control" step="0.01" min="0" value="0" oninput="calcPrecio('C')" /></td>
+            <td><input type="number" id="utilC" class="form-control" readonly value="0.00" /></td>
+            <td><input type="number" id="ivaPC" class="form-control" readonly value="0.00" /></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Estado -->
+    <div class="section-card">
+      <h2 class="section-title">
+        <span class="material-icons-round">toggle_on</span> Estado
+      </h2>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.875rem;font-weight:500;">
+        <input type="checkbox" name="activo" checked /> Servicio activo
+      </label>
+    </div>
+
+    <div class="actions-bar">
+      <a href="/servicios" class="btn btn-secondary">Cancelar</a>
+      <button type="submit" class="btn btn-primary">
+        <span class="material-icons-round">save</span> Crear Servicio
+      </button>
+    </div>
+  </form>
+</AdminLayout>
+
+<script is:inline>
+function showDesc(key, btn) {
+  document.querySelectorAll('.desc-area').forEach(function(el) { el.style.display = 'none'; });
+  document.querySelectorAll('.desc-tab').forEach(function(el) { el.classList.remove('active'); });
+  document.getElementById('tab_' + key).style.display = '';
+  btn.classList.add('active');
+}
+
+function calcPrecio(idx) {
+  var costo  = parseFloat(document.getElementById('costo').value) || 0;
+  var precio = parseFloat(document.getElementById('precio' + idx).value) || 0;
+  var util   = precio > 0 ? ((precio - costo) / precio * 100) : 0;
+  var ivaP   = precio * 1.16;
+  document.getElementById('util' + idx).value  = util.toFixed(2);
+  document.getElementById('ivaP' + idx).value  = ivaP.toFixed(2);
+}
+
+function buildPrecioJSON() {
+  ['A','B','C'].forEach(function(idx) {
+    var precio = parseFloat(document.getElementById('precio' + idx).value) || 0;
+    var util   = parseFloat(document.getElementById('util' + idx).value) || 0;
+    var ivaP   = parseFloat(document.getElementById('ivaP' + idx).value) || 0;
+    document.getElementById('hidden' + idx).value = JSON.stringify({ precio: precio, utilidad: util, precioConImpuesto: ivaP });
+  });
+}
+
+document.getElementById('servicioForm').addEventListener('submit', function() {
+  buildPrecioJSON();
+});
+</script>
+
+<style>
+  .page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }
+  h1 { font-size:1.5rem; font-weight:700; margin:0; display:flex; align-items:center; gap:8px; }
+  .section-card { background:white; border:1px solid var(--border); border-radius:var(--radius); padding:24px; margin-bottom:20px; }
+  .section-title { font-size:1rem; font-weight:600; margin:0 0 16px; display:flex; align-items:center; gap:8px; }
+  .form-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .form-grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+  .form-group { display:flex; flex-direction:column; gap:4px; margin-bottom:14px; }
+  .form-group label { font-weight:500; font-size:0.875rem; }
+  .form-control { border:1px solid var(--border); border-radius:var(--radius); padding:8px 12px; font-size:0.875rem; width:100%; box-sizing:border-box; }
+  .form-control:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(37,99,235,.1); }
+  .form-control[readonly] { background:#f8fafc; color:var(--text-muted); }
+  .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:var(--radius); font-size:0.875rem; font-weight:500; border:1px solid transparent; cursor:pointer; text-decoration:none; transition:all .2s; }
+  .btn-primary { background:var(--primary); color:white; }
+  .btn-primary:hover { background:var(--primary-dark); }
+  .btn-secondary { background:white; border-color:var(--border); color:var(--text); }
+  .btn-secondary:hover { background:#f8fafc; }
+  .btn-danger { background:var(--danger); color:white; }
+  .btn-danger:hover { background:#b91c1c; }
+  .btn-sm { padding:4px 10px; font-size:0.8rem; }
+  .actions-bar { display:flex; gap:12px; justify-content:flex-end; padding-top:8px; }
+  .price-table { width:100%; border-collapse:collapse; margin-top:12px; }
+  .price-table th { background:#f8fafc; padding:8px 12px; text-align:left; font-size:0.75rem; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); border-bottom:1px solid var(--border); }
+  .price-table td { padding:8px 12px; border-bottom:1px solid var(--border); }
+  .price-table tr:last-child td { border-bottom:none; }
+  .price-label { font-weight:600; font-size:0.875rem; }
+  .desc-tabs { display:flex; gap:2px; margin-bottom:12px; flex-wrap:wrap; }
+  .desc-tab { padding:6px 14px; border:1px solid var(--border); border-radius:var(--radius); font-size:0.8rem; cursor:pointer; background:white; }
+  .desc-tab.active { background:var(--primary); color:white; border-color:var(--primary); }
+  @media (max-width:700px) { .form-grid-2,.form-grid-3 { grid-template-columns:1fr; } }
+</style>

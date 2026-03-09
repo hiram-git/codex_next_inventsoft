@@ -78,6 +78,9 @@ const estadoBadge: Record<string, string> = {
           </button>
         </form>
       )}
+      <a href={`/api/pdf/pedido/${id}`} class="btn btn-pdf">
+        <span class="material-icons-round" style="font-size:18px">picture_as_pdf</span> PDF
+      </a>
       <a href={`/pedidos/${id}/imprimir`} target="_blank" class="btn btn-outline">
         <span class="material-icons-round" style="font-size:18px">print</span> Imprimir
       </a>
@@ -176,5 +179,7 @@ const estadoBadge: Record<string, string> = {
   .badge-secondary { background: var(--bg); color: var(--text-muted); }
   .btn-outline { background: white; border: 1px solid var(--border); color: var(--text); }
   .btn-outline:hover { background: #f8fafc; }
+  .btn-pdf { background: #dc2626; color: white; border-color: transparent; }
+  .btn-pdf:hover { background: #b91c1c; }
   @media (max-width: 768px) { .info-grid { grid-template-columns: 1fr 1fr; } }
 </style>

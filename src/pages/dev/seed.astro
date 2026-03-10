@@ -1,0 +1,396 @@
+---
+/**
+ * Stress-test seed page — /dev/seed
+ * Populates the DB with realistic bulk data for load testing.
+ * POST ?token=devonly to trigger seeding.
+ * GET shows a simple dashboard with counts and a trigger button.
+ */
+import { db } from '../../db';
+import * as schema from '../../db/schema';
+import { sql } from 'drizzle-orm';
+
+const DEV_TOKEN = 'devonly';
+
+// ── Fake data pools ────────────────────────────────────────────────────────
+const NOMBRES = ['Carlos','María','Juan','Ana','Luis','Sofía','Pedro','Laura','Jorge','Valentina',
+  'Andrés','Camila','Diego','Isabella','Miguel','Daniela','Roberto','Natalia','Fernando','Alejandra',
+  'Hernán','Paola','Ricardo','Juliana','Sergio','Marcela','Guillermo','Catalina','Antonio','Verónica'];
+const APELLIDOS = ['García','Rodríguez','López','Martínez','González','Pérez','Torres','Ramírez',
+  'Flores','Cruz','Herrera','Morales','Jiménez','Díaz','Vargas','Castro','Ruiz','Alvarado',
+  'Mendoza','Reyes','Ortega','Guerrero','Delgado','Rojas','Sandoval','Fuentes','Aguilar','Ramos'];
+const EMPRESAS = ['Soluciones','Servicios','Industrias','Comercial','Tecnología','Grupo','Inversiones',
+  'Distribuidora','Constructora','Consultora','Importadora','Exportadora'];
+const CIUDADES = ['Ciudad de Panamá','Colón','David','Santiago','La Chorrera','Chitré','Aguadulce','Penonomé'];
+const PRODUCTOS_NOMBRES = [
+  'Laptop HP ProBook 450','Monitor Samsung 24"','Teclado Mecánico Corsair','Mouse Logitech MX',
+  'Silla Ergonómica Pro','Escritorio Ejecutivo','Impresora Láser HP','Router WiFi 6',
+  'Cable HDMI 2m','UPS APC 750VA','Switch 24 puertos','Disco SSD 1TB',
+  'Memoria RAM 16GB','Procesador Intel i7','Placa madre ASUS','Fuente 650W',
+  'Cámara IP 2MP','Teléfono VoIP Cisco','Rack de Servidores 12U','Patch Panel Cat6',
+  'Aire Acondicionado 12000 BTU','Regulador de Voltaje 2000W','Gabinete Metálico','Canaleta 40x25mm',
+  'Cable UTP Cat6 305m','Conector RJ45 (100u)','Patch Cord 1m','Access Point Ubiquiti',
+  'Firewall Fortinet 60F','Server Dell PowerEdge','Laptop Dell Latitude','Tablet Samsung A8',
+  'Proyector Epson 3500lm','Pantalla de Proyección','Pizarra Interactiva','Audífonos Sony',
+  'Webcam Logitech HD','Micrófono Blue Yeti','Grabadora de Voz','Escáner HP',
+  'Guillotina de Papel','Plastificadora A4','Encuadernadora','Cartucho Toner',
+  'Resma de Papel','Marcadores','Folder Manila','Archivador 4 gavetas',
+  'Silla Visitante','Mesa de Reuniones'];
+const SERVICIOS_NOMBRES = [
+  'Mantenimiento Preventivo PC','Instalación de Red','Configuración de Servidor',
+  'Soporte Técnico Mensual','Capacitación Microsoft Office','Backup en la Nube',
+  'Diseño de Red LAN','Implementación ERP','Auditoría de Seguridad',
+  'Migración de Datos','Gestión de Correo Corporativo','VPN Empresarial',
+  'Monitoreo 24/7','Consultoría TI','Desarrollo Web','Mantenimiento Web',
+  'SEO y Marketing Digital','Instalación CCTV','Instalación Alarma','Gestión de Dominio'];
+const MARCAS = ['HP','Dell','Samsung','Lenovo','Apple','Cisco','Logitech','Corsair','ASUS','LG'];
+const DEPARTAMENTOS = ['Informática','Redes','Hardware','Software','Seguridad','Soporte','Ventas','Administración'];
+const GRUPOS = ['Computadoras','Periféricos','Networking','Servidores','Accesorios','Mobiliario','Consumibles'];
+const LINEAS = ['Empresarial','Hogar','Gaming','Industrial','Básica','Premium'];
+const ESTADOS_COTIZACION = ['borrador','enviada','aceptada','rechazada'];
+
+function rnd(arr: string[]) { return arr[Math.floor(Math.random() * arr.length)]; }
+function rndNum(min: number, max: number) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+function rndPrice(min: number, max: number) { return +(Math.random() * (max - min) + min).toFixed(2); }
+function today() { return new Date().toISOString().split('T')[0]; }
+function pastDate(daysAgo: number) {
+  const d = new Date(); d.setDate(d.getDate() - daysAgo);
+  return d.toISOString().split('T')[0];
+}
+
+// ── Run seeding ────────────────────────────────────────────────────────────
+let result: { success: boolean; message: string; counts?: Record<string, number> } | null = null;
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const token = form.get('token')?.toString();
+
+  if (token !== DEV_TOKEN) {
+    result = { success: false, message: 'Token inválido.' };
+  } else {
+    try {
+      // 1. Seed catalogs
+      const depts = await db.insert(schema.departamentos)
+        .values(DEPARTAMENTOS.map(n => ({ nombre: n, descripcion: `Área de ${n}`, activo: true })))
+        .returning();
+      const grupos = await db.insert(schema.grupos)
+        .values(GRUPOS.map(n => ({ nombre: n, descripcion: n, activo: true })))
+        .returning();
+      const marcas = await db.insert(schema.marcas)
+        .values(MARCAS.map(n => ({ nombre: n, descripcion: `Marca ${n}`, activo: true })))
+        .returning();
+      const lineas = await db.insert(schema.lineas)
+        .values(LINEAS.map(n => ({ nombre: n, descripcion: `Línea ${n}`, activo: true })))
+        .returning();
+
+      // 2. Seed vendedores (10)
+      const vendedoresData = Array.from({ length: 10 }, (_, i) => ({
+        nombre: `${rnd(NOMBRES)} ${rnd(APELLIDOS)}`,
+        email: `vendedor${i + 1}@empresa.com`,
+        telefono: `+507 6${rndNum(100,999)}-${rndNum(1000,9999)}`,
+        activo: true,
+      }));
+      const vendedores = await db.insert(schema.vendedores).values(vendedoresData).returning();
+
+      // 3. Seed clientes (200)
+      const clientesData = Array.from({ length: 200 }, (_, i) => {
+        const nombre = `${rnd(NOMBRES)} ${rnd(APELLIDOS)}`;
+        const empresa = `${rnd(EMPRESAS)} ${rnd(APELLIDOS)} S.A.`;
+        const tipoIdx = i % 4;
+        const tipos = ['Consumidor Final','Contribuyente','Extranjero','Gobierno'];
+        const contribuyentes = ['natural','juridico','',''];
+        const permiteCredito = Math.random() > 0.4;
+        const vendedor = vendedores[rndNum(0, vendedores.length - 1)];
+        return {
+          nombre,
+          razonSocial: tipoIdx === 1 ? empresa : '',
+          nombreComercial: tipoIdx === 1 ? empresa.split(' ').slice(0,2).join(' ') : '',
+          email: `${nombre.toLowerCase().replace(/ /g,'.')}.${i}@email.com`,
+          telefono: `+507 6${rndNum(100,999)}-${rndNum(1000,9999)}`,
+          direccion: `${rndNum(1,99)} Calle ${rndNum(1,50)}, ${rnd(CIUDADES)}`,
+          tipoCliente: tipos[tipoIdx],
+          contribuyente: contribuyentes[tipoIdx],
+          ruc: tipoIdx === 1 ? `${rndNum(100,999)}-${rndNum(100,999)}-${rndNum(10000,99999)}` : '',
+          digitoVerificador: tipoIdx === 1 ? String(rndNum(1,99)) : '',
+          permiteCredito,
+          limiteCredito: permiteCredito ? String(rndPrice(500, 10000)) : '0',
+          diaVencimiento: permiteCredito ? rndNum(15, 60) : 30,
+          descuentoParcial: String(rndPrice(0, 10)),
+          descuentoGlobal: String(rndPrice(0, 5)),
+          vendedorId: vendedor.id,
+          vendedor: vendedor.nombre,
+          activo: true,
+        };
+      });
+      // Insert in batches of 50
+      const clientesBatch: typeof clientesData[0][][] = [];
+      for (let i = 0; i < clientesData.length; i += 50) clientesBatch.push(clientesData.slice(i, i + 50));
+      const clientes: { id: number; nombre: string }[] = [];
+      for (const batch of clientesBatch) {
+        const rows = await db.insert(schema.clientes).values(batch).returning({ id: schema.clientes.id, nombre: schema.clientes.nombre });
+        clientes.push(...rows);
+      }
+
+      // 4. Seed productos (100)
+      const productosData = PRODUCTOS_NOMBRES.map((nombre, i) => {
+        const precio = rndPrice(50, 3000);
+        const costo = rndPrice(precio * 0.5, precio * 0.8);
+        const dept = depts[i % depts.length];
+        const grupo = grupos[i % grupos.length];
+        const marca = marcas[i % marcas.length];
+        const linea = lineas[i % lineas.length];
+        return {
+          codigo: `PRD-${String(i + 1).padStart(4,'0')}`,
+          referencia: `REF-${rndNum(10000,99999)}`,
+          nombre,
+          descripcion: `Descripción detallada de ${nombre}`,
+          precio: String(precio),
+          costo: String(costo),
+          stock: rndNum(0, 200),
+          minimoInventario: String(rndNum(2, 10)),
+          maximoInventario: String(rndNum(50, 200)),
+          departamentoId: dept.id,
+          departamento: dept.nombre,
+          grupoId: grupo.id,
+          grupo: grupo.nombre,
+          marcaId: marca.id,
+          marca: marca.nombre,
+          lineaId: linea.id,
+          linea: linea.nombre,
+          activo: true,
+        };
+      });
+      const productos = await db.insert(schema.productos).values(productosData).returning();
+
+      // 5. Seed servicios (20)
+      const serviciosData = SERVICIOS_NOMBRES.map((nombre, i) => {
+        const precio = rndPrice(50, 2000);
+        return {
+          codigo: `SVC-${String(i + 1).padStart(3,'0')}`,
+          nombre,
+          descripcion: `Servicio: ${nombre}`,
+          precio: String(precio),
+          costo: String(rndPrice(precio * 0.3, precio * 0.6)),
+          activo: true,
+        };
+      });
+      const servicios = await db.insert(schema.servicios).values(serviciosData).returning();
+
+      // 6. Seed cotizaciones (500) in batches of 50
+      const allItems = [
+        ...productos.map(p => ({ id: String(p.id), nombre: p.nombre, precio: Number(p.precio), tipo: 'producto' as const })),
+        ...servicios.map(s => ({ id: String(s.id), nombre: s.nombre, precio: Number(s.precio), tipo: 'servicio' as const })),
+      ];
+
+      let cotCount = 0;
+      const cotRows: { id: number; total: number; clienteId: number; clienteNombre: string; items: any[] }[] = [];
+
+      for (let batch = 0; batch < 10; batch++) {
+        const cotBatch = Array.from({ length: 50 }, () => {
+          const cliente = clientes[rndNum(0, clientes.length - 1)];
+          const itemCount = rndNum(2, 8);
+          const selectedItems = Array.from({ length: itemCount }, () => {
+            const item = allItems[rndNum(0, allItems.length - 1)];
+            const cantidad = rndNum(1, 10);
+            const precioUnitario = +(item.precio * (1 + rndNum(-5, 15) / 100)).toFixed(2);
+            const subtotal = +(precioUnitario * cantidad).toFixed(2);
+            return { tipo: item.tipo, productoId: item.id, productoNombre: item.nombre, cantidad, precioUnitario, subtotal };
+          });
+          const subtotal = +selectedItems.reduce((s, i) => s + i.subtotal, 0).toFixed(2);
+          const iva = +(subtotal * 0.07).toFixed(2);
+          const total = +(subtotal + iva).toFixed(2);
+          cotCount++;
+          const numero = `COT-${String(cotCount).padStart(4,'0')}`;
+          const daysAgo = rndNum(0, 180);
+          return {
+            numero,
+            clienteId: cliente.id,
+            clienteNombre: cliente.nombre,
+            items: selectedItems,
+            subtotal: String(subtotal),
+            iva: String(iva),
+            total: String(total),
+            estado: rnd(ESTADOS_COTIZACION),
+            fecha: pastDate(daysAgo),
+            notas: '',
+          };
+        });
+        const rows = await db.insert(schema.cotizaciones).values(cotBatch).returning({
+          id: schema.cotizaciones.id,
+          total: schema.cotizaciones.total,
+          clienteId: schema.cotizaciones.clienteId,
+          clienteNombre: schema.cotizaciones.clienteNombre,
+          items: schema.cotizaciones.items,
+        });
+        cotRows.push(...rows.map(r => ({ ...r, total: Number(r.total) })));
+      }
+
+      // 7. Convert first 200 cotizaciones to facturas
+      let facCount = 0;
+      const facturaBatches = cotRows.slice(0, 200);
+      for (let i = 0; i < facturaBatches.length; i += 50) {
+        const batch = facturaBatches.slice(i, i + 50);
+        const facValues = batch.map(cot => {
+          facCount++;
+          const numero = `FAC-${String(facCount).padStart(4,'0')}`;
+          const subtotal = +(cot.total / 1.07).toFixed(2);
+          const iva = +(cot.total - subtotal).toFixed(2);
+          const daysAgo = rndNum(0, 120);
+          const estado = Math.random() > 0.3 ? 'pagada' : 'pendiente';
+          return {
+            numero,
+            clienteId: cot.clienteId,
+            clienteNombre: cot.clienteNombre,
+            items: (cot.items ?? []) as any,
+            subtotal: String(subtotal),
+            iva: String(iva),
+            total: String(cot.total),
+            estado,
+            fecha: pastDate(daysAgo),
+          };
+        });
+        await db.insert(schema.facturas).values(facValues);
+      }
+
+      const counts = {
+        departamentos: depts.length,
+        grupos: grupos.length,
+        marcas: marcas.length,
+        lineas: lineas.length,
+        vendedores: vendedores.length,
+        clientes: clientes.length,
+        productos: productos.length,
+        servicios: servicios.length,
+        cotizaciones: cotRows.length,
+        facturas: facturaBatches.length,
+      };
+      result = { success: true, message: '¡Datos de prueba generados exitosamente!', counts };
+    } catch (e: any) {
+      result = { success: false, message: e.message ?? 'Error durante el seeding.' };
+    }
+  }
+}
+
+// Get current counts for display
+const [cClientes, cProductos, cServicios, cCotizaciones, cFacturas] = await Promise.all([
+  db.select({ c: sql<number>`count(*)` }).from(schema.clientes),
+  db.select({ c: sql<number>`count(*)` }).from(schema.productos),
+  db.select({ c: sql<number>`count(*)` }).from(schema.servicios),
+  db.select({ c: sql<number>`count(*)` }).from(schema.cotizaciones),
+  db.select({ c: sql<number>`count(*)` }).from(schema.facturas),
+]);
+const currentCounts = {
+  clientes: Number(cClientes[0].c),
+  productos: Number(cProductos[0].c),
+  servicios: Number(cServicios[0].c),
+  cotizaciones: Number(cCotizaciones[0].c),
+  facturas: Number(cFacturas[0].c),
+};
+---
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stress Test Seed — Dev</title>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 40px 20px; }
+    .container { max-width: 760px; margin: 0 auto; }
+    h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; color: #f8fafc; }
+    .subtitle { color: #94a3b8; font-size: 0.9rem; margin-bottom: 32px; }
+    .tag { display: inline-block; background: #dc2626; color: white; font-size: 0.7rem; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; font-weight: 700; margin-left: 8px; vertical-align: middle; }
+    .counts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 32px; }
+    .count-card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 16px; text-align: center; }
+    .count-num { font-size: 1.8rem; font-weight: 800; color: #38bdf8; }
+    .count-label { font-size: 0.78rem; color: #94a3b8; margin-top: 2px; }
+    .seed-box { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 28px; }
+    h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 16px; color: #f1f5f9; }
+    .plan { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 24px; }
+    .plan-item { background: #0f172a; border-radius: 8px; padding: 10px 14px; font-size: 0.85rem; color: #94a3b8; display: flex; justify-content: space-between; }
+    .plan-item strong { color: #f1f5f9; }
+    .input-row { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
+    input[type="text"] { background: #0f172a; border: 1px solid #334155; color: #f1f5f9; border-radius: 8px; padding: 10px 14px; font-size: 0.9rem; flex: 1; }
+    input[type="text"]::placeholder { color: #475569; }
+    input[type="text"]:focus { outline: none; border-color: #38bdf8; }
+    button[type="submit"] { background: #dc2626; color: white; border: none; border-radius: 8px; padding: 10px 22px; font-size: 0.9rem; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background 0.2s; }
+    button[type="submit"]:hover { background: #b91c1c; }
+    .hint { font-size: 0.78rem; color: #475569; }
+    .alert { border-radius: 8px; padding: 14px 16px; margin-bottom: 20px; font-size: 0.9rem; }
+    .alert-success { background: #052e16; border: 1px solid #16a34a; color: #86efac; }
+    .alert-error   { background: #2d0c0c; border: 1px solid #dc2626; color: #fca5a5; }
+    .result-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-top: 14px; }
+    .rc { background: #0a1628; border-radius: 8px; padding: 10px; text-align: center; }
+    .rc-num { font-size: 1.4rem; font-weight: 700; color: #4ade80; }
+    .rc-lbl { font-size: 0.72rem; color: #6b7280; }
+    .warning-box { background: #1c1017; border: 1px solid #7c3aed; border-radius: 10px; padding: 16px; margin-bottom: 24px; font-size: 0.85rem; color: #c4b5fd; line-height: 1.6; }
+    .warning-box strong { color: #a78bfa; }
+    a { color: #38bdf8; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Stress Test Seed <span class="tag">DEV ONLY</span></h1>
+    <p class="subtitle">Genera datos masivos para pruebas de rendimiento del sistema</p>
+
+    <div class="counts-grid">
+      <div class="count-card"><div class="count-num">{currentCounts.clientes}</div><div class="count-label">Clientes</div></div>
+      <div class="count-card"><div class="count-num">{currentCounts.productos}</div><div class="count-label">Productos</div></div>
+      <div class="count-card"><div class="count-num">{currentCounts.servicios}</div><div class="count-label">Servicios</div></div>
+      <div class="count-card"><div class="count-num">{currentCounts.cotizaciones}</div><div class="count-label">Cotizaciones</div></div>
+      <div class="count-card"><div class="count-num">{currentCounts.facturas}</div><div class="count-label">Facturas</div></div>
+    </div>
+
+    {result && (
+      <div class={`alert ${result.success ? 'alert-success' : 'alert-error'}`}>
+        <strong>{result.success ? '✓' : '✗'} {result.message}</strong>
+        {result.counts && (
+          <div class="result-counts">
+            {Object.entries(result.counts).map(([k, v]) => (
+              <div class="rc"><div class="rc-num">{v}</div><div class="rc-lbl">{k}</div></div>
+            ))}
+          </div>
+        )}
+      </div>
+    )}
+
+    <div class="warning-box">
+      <strong>⚠ Advertencia:</strong> Esta operación inserta datos reales en la base de datos.
+      Ejecutar múltiples veces <strong>duplicará</strong> los datos. Usa esta página únicamente
+      en ambientes de desarrollo o staging. Para limpiar los datos, accede a la base de datos
+      directamente y ejecuta <code>TRUNCATE ... CASCADE</code>.
+    </div>
+
+    <div class="seed-box">
+      <h2>Generar datos de prueba</h2>
+      <div class="plan">
+        <div class="plan-item"><span>Catálogos</span><strong>8+7+10+6 registros</strong></div>
+        <div class="plan-item"><span>Vendedores</span><strong>10</strong></div>
+        <div class="plan-item"><span>Clientes</span><strong>200</strong></div>
+        <div class="plan-item"><span>Productos</span><strong>50</strong></div>
+        <div class="plan-item"><span>Servicios</span><strong>20</strong></div>
+        <div class="plan-item"><span>Cotizaciones</span><strong>500</strong></div>
+        <div class="plan-item"><span>Facturas</span><strong>200 (desde cotizaciones)</strong></div>
+        <div class="plan-item"><span>Total registros</span><strong>~1,000+</strong></div>
+      </div>
+
+      <form method="POST">
+        <div class="input-row">
+          <input type="text" name="token" placeholder="Token de autorización (devonly)" autocomplete="off" />
+          <button type="submit">
+            <span class="material-icons-round" style="font-size:16px;vertical-align:middle">science</span>
+            Ejecutar Seed
+          </button>
+        </div>
+        <p class="hint">Token por defecto: <code>devonly</code> — Tiempo estimado: 5–20 segundos</p>
+      </form>
+    </div>
+
+    <p style="margin-top:24px;font-size:0.8rem;color:#475569">
+      <a href="/dashboard">← Volver al Dashboard</a>
+    </p>
+  </div>
+</body>
+</html>

@@ -29,6 +29,18 @@ body {
   background: var(--bg);
   color: var(--text);
   line-height: 1.6;
+  cursor: default;
+}
+
+/* Ensure cursor is always visible regardless of OS cursor theme */
+*, *::before, *::after {
+  cursor: inherit;
+}
+a, button, [role="button"], select, label[for] {
+  cursor: pointer;
+}
+input, textarea {
+  cursor: text;
 }
 
 a {

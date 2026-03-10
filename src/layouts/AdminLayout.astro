@@ -67,54 +67,79 @@ const configItems = [
     </div>
 
     <nav class="sidebar-nav">
-      <div class="nav-section">
-        <span class="nav-section-title">Principal</span>
-        {menuItems.map(item => (
-          <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]} title={item.label}>
-            <span class="material-icons-round">{item.icon}</span>
-            <span class="nav-link-label">{item.label}</span>
-          </a>
-        ))}
+      <div class="nav-section" data-section="principal">
+        <button class="nav-section-title" type="button">
+          <span>Principal</span>
+          <span class="material-icons-round section-chevron">expand_less</span>
+        </button>
+        <div class="nav-section-links">
+          {menuItems.map(item => (
+            <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]} title={item.label}>
+              <span class="material-icons-round">{item.icon}</span>
+              <span class="nav-link-label">{item.label}</span>
+            </a>
+          ))}
+        </div>
       </div>
 
-      <div class="nav-section">
-        <span class="nav-section-title">Gestión de Cobros</span>
-        {cobrosItems.map(item => (
-          <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]} title={item.label}>
-            <span class="material-icons-round">{item.icon}</span>
-            <span class="nav-link-label">{item.label}</span>
-          </a>
-        ))}
+      <div class="nav-section" data-section="cobros">
+        <button class="nav-section-title" type="button">
+          <span>Gestión de Cobros</span>
+          <span class="material-icons-round section-chevron">expand_less</span>
+        </button>
+        <div class="nav-section-links">
+          {cobrosItems.map(item => (
+            <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]} title={item.label}>
+              <span class="material-icons-round">{item.icon}</span>
+              <span class="nav-link-label">{item.label}</span>
+            </a>
+          ))}
+        </div>
       </div>
 
-      <div class="nav-section">
-        <span class="nav-section-title">Control de Inventario</span>
-        {inventarioItems.map(item => (
-          <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]} title={item.label}>
-            <span class="material-icons-round">{item.icon}</span>
-            <span class="nav-link-label">{item.label}</span>
-          </a>
-        ))}
+      <div class="nav-section" data-section="inventario">
+        <button class="nav-section-title" type="button">
+          <span>Control de Inventario</span>
+          <span class="material-icons-round section-chevron">expand_less</span>
+        </button>
+        <div class="nav-section-links">
+          {inventarioItems.map(item => (
+            <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]} title={item.label}>
+              <span class="material-icons-round">{item.icon}</span>
+              <span class="nav-link-label">{item.label}</span>
+            </a>
+          ))}
+        </div>
       </div>
 
-      <div class="nav-section">
-        <span class="nav-section-title">Reportes</span>
-        {reportesItems.map(item => (
-          <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]} title={item.label}>
-            <span class="material-icons-round">{item.icon}</span>
-            <span class="nav-link-label">{item.label}</span>
-          </a>
-        ))}
+      <div class="nav-section" data-section="reportes">
+        <button class="nav-section-title" type="button">
+          <span>Reportes</span>
+          <span class="material-icons-round section-chevron">expand_less</span>
+        </button>
+        <div class="nav-section-links">
+          {reportesItems.map(item => (
+            <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]} title={item.label}>
+              <span class="material-icons-round">{item.icon}</span>
+              <span class="nav-link-label">{item.label}</span>
+            </a>
+          ))}
+        </div>
       </div>
 
-      <div class="nav-section">
-        <span class="nav-section-title">Configuración</span>
-        {configItems.map(item => (
-          <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]} title={item.label}>
-            <span class="material-icons-round">{item.icon}</span>
-            <span class="nav-link-label">{item.label}</span>
-          </a>
-        ))}
+      <div class="nav-section" data-section="configuracion">
+        <button class="nav-section-title" type="button">
+          <span>Configuración</span>
+          <span class="material-icons-round section-chevron">expand_less</span>
+        </button>
+        <div class="nav-section-links">
+          {configItems.map(item => (
+            <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]} title={item.label}>
+              <span class="material-icons-round">{item.icon}</span>
+              <span class="nav-link-label">{item.label}</span>
+            </a>
+          ))}
+        </div>
       </div>
     </nav>
   </aside>
@@ -203,7 +228,10 @@ const configItems = [
   }
 
   .nav-section-title {
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
     font-size: 0.7rem;
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -211,9 +239,34 @@ const configItems = [
     padding: 8px 12px 4px;
     font-weight: 600;
     white-space: nowrap;
-    transition: opacity 0.2s, max-height 0.25s ease, padding 0.25s ease;
-    max-height: 40px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: color 0.2s;
+  }
+
+  .nav-section-title:hover {
+    color: rgba(255,255,255,0.7);
+  }
+
+  .section-chevron {
+    font-size: 16px !important;
+    transition: transform 0.25s ease;
+    flex-shrink: 0;
+  }
+
+  .nav-section.collapsed .section-chevron {
+    transform: rotate(-90deg);
+  }
+
+  .nav-section-links {
     overflow: hidden;
+    max-height: 600px;
+    transition: max-height 0.3s ease;
+  }
+
+  .nav-section.collapsed .nav-section-links {
+    max-height: 0;
   }
 
   .nav-link {
@@ -260,10 +313,13 @@ const configItems = [
   }
 
   .sidebar.collapsed .nav-section-title {
-    opacity: 0;
-    max-height: 0;
-    padding-top: 0;
-    padding-bottom: 0;
+    justify-content: center;
+    padding: 8px 0 4px;
+  }
+
+  .sidebar.collapsed .nav-section-title > span:first-child,
+  .sidebar.collapsed .section-chevron {
+    display: none;
   }
 
   .sidebar.collapsed .nav-link {
@@ -407,7 +463,9 @@ const configItems = [
     }
 
     .sidebar.collapsed .sidebar-brand { opacity: 1; width: auto; overflow: visible; }
-    .sidebar.collapsed .nav-section-title { opacity: 1; max-height: 40px; padding: 8px 12px 4px; }
+    .sidebar.collapsed .nav-section-title { justify-content: space-between; padding: 8px 12px 4px; }
+    .sidebar.collapsed .nav-section-title > span:first-child,
+    .sidebar.collapsed .section-chevron { display: inline-flex; }
     .sidebar.collapsed .nav-link { justify-content: flex-start; padding: 10px 12px; }
     .sidebar.collapsed .nav-link-label { opacity: 1; width: auto; overflow: visible; }
 
@@ -440,34 +498,54 @@ const configItems = [
   const backdrop = document.getElementById('sidebarBackdrop')!;
   const isMobile = () => window.innerWidth <= 768;
 
-  // Restore desktop collapse state from localStorage
+  // ── Sidebar collapse (hamburger) ───────────────────────────
   if (!isMobile() && localStorage.getItem('sidebarCollapsed') === 'true') {
     sidebar.classList.add('collapsed');
   }
 
   toggle.addEventListener('click', () => {
     if (isMobile()) {
-      // Mobile: slide in/out
       const isOpen = sidebar.classList.toggle('open');
       backdrop.classList.toggle('visible', isOpen);
     } else {
-      // Desktop: collapse / expand
       const isCollapsed = sidebar.classList.toggle('collapsed');
       localStorage.setItem('sidebarCollapsed', String(isCollapsed));
     }
   });
 
-  // Close on backdrop click (mobile)
   backdrop.addEventListener('click', () => {
     sidebar.classList.remove('open');
     backdrop.classList.remove('visible');
   });
 
-  // Re-evaluate on resize
   window.addEventListener('resize', () => {
     if (!isMobile()) {
       sidebar.classList.remove('open');
       backdrop.classList.remove('visible');
     }
+  });
+
+  // ── Section accordions ─────────────────────────────────────
+  const collapsedSections: Set<string> = new Set(
+    JSON.parse(localStorage.getItem('collapsedSections') ?? '[]')
+  );
+
+  // Restore collapsed state
+  document.querySelectorAll<HTMLElement>('.nav-section[data-section]').forEach(section => {
+    const id = section.dataset.section!;
+    if (collapsedSections.has(id)) section.classList.add('collapsed');
+
+    section.querySelector('.nav-section-title')!.addEventListener('click', () => {
+      // Don't toggle when sidebar is in icon-only mode
+      if (sidebar.classList.contains('collapsed')) return;
+
+      section.classList.toggle('collapsed');
+      if (section.classList.contains('collapsed')) {
+        collapsedSections.add(id);
+      } else {
+        collapsedSections.delete(id);
+      }
+      localStorage.setItem('collapsedSections', JSON.stringify([...collapsedSections]));
+    });
   });
 </script>

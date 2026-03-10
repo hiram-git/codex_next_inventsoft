@@ -176,6 +176,9 @@ const configItems = [
       <slot />
     </main>
   </div>
+
+  <!-- Toast container -->
+  <div id="ui-toasts" aria-live="polite"></div>
 </body>
 </html>
 
@@ -446,6 +449,63 @@ const configItems = [
     padding: 24px;
   }
 
+  /* ─── Toast notifications ─────────────────────────────────── */
+  #ui-toasts {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+  }
+
+  .ui-toast {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    font-size: 0.875rem;
+    min-width: 280px;
+    max-width: 380px;
+    pointer-events: all;
+  }
+
+  .ui-toast-msg {
+    flex: 1;
+    line-height: 1.4;
+  }
+
+  .ui-toast-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    border-radius: 4px;
+    transition: background 0.15s;
+  }
+
+  .ui-toast-close:hover { background: var(--bg); }
+
+  /* ─── Button spinner ──────────────────────────────────────── */
+  @keyframes ui-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .ui-spinner {
+    animation: ui-spin 0.8s linear infinite;
+    font-size: 16px !important;
+  }
+
   /* ─── Mobile ──────────────────────────────────────────────── */
   @media (max-width: 768px) {
     .sidebar {
@@ -548,4 +608,9 @@ const configItems = [
       localStorage.setItem('collapsedSections', JSON.stringify([...collapsedSections]));
     });
   });
+</script>
+
+<!-- Global UI animations & toast system -->
+<script>
+  import '../scripts/ui';
 </script>

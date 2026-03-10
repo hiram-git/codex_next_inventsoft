@@ -32,10 +32,14 @@ if (Astro.request.method === 'POST') {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Login - Admin Portal</title>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet" />
 </head>
 <body>
-  <div class="login-container">
-    <div class="login-card">
+  <!-- Floating background particles -->
+  <canvas id="bg-canvas" style="position:fixed;inset:0;pointer-events:none;z-index:0"></canvas>
+
+  <div class="login-container" style="position:relative;z-index:1">
+    <div class="login-card" id="loginCard">
       <div class="login-header">
         <div class="login-logo">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -61,7 +65,8 @@ if (Astro.request.method === 'POST') {
           <input type="password" id="password" name="password" class="form-control" placeholder="••••••••" required />
         </div>
 
-        <button type="submit" class="btn btn-primary login-btn">
+        <button type="submit" class="btn btn-primary login-btn" id="loginBtn">
+          <span class="material-icons-round" style="font-size:18px">login</span>
           Iniciar Sesión
         </button>
       </form>
@@ -134,4 +139,87 @@ if (Astro.request.method === 'POST') {
     color: var(--text-muted);
     font-size: 0.8rem;
   }
+
+  @keyframes ui-spin { to { transform: rotate(360deg); } }
+  .ui-spinner { animation: ui-spin 0.8s linear infinite; font-size: 16px !important; }
 </style>
+
+<script>
+  import { gsap } from 'gsap';
+
+  // ── Background particles ──────────────────────────────────────
+  const canvas  = document.getElementById('bg-canvas') as HTMLCanvasElement;
+  const ctx     = canvas.getContext('2d')!;
+  const W = () => canvas.width  = window.innerWidth;
+  const H = () => canvas.height = window.innerHeight;
+  W(); H();
+  window.addEventListener('resize', () => { W(); H(); });
+
+  interface Particle { x: number; y: number; r: number; alpha: number; vx: number; vy: number; }
+  const particles: Particle[] = Array.from({ length: 38 }, () => ({
+    x: Math.random() * window.innerWidth,
+    y: Math.random() * window.innerHeight,
+    r: Math.random() * 3 + 1,
+    alpha: Math.random() * 0.4 + 0.05,
+    vx: (Math.random() - 0.5) * 0.35,
+    vy: (Math.random() - 0.5) * 0.35,
+  }));
+
+  function drawParticles() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    particles.forEach(p => {
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0) p.x = canvas.width;
+      if (p.x > canvas.width) p.x = 0;
+      if (p.y < 0) p.y = canvas.height;
+      if (p.y > canvas.height) p.y = 0;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${p.alpha})`;
+      ctx.fill();
+    });
+    requestAnimationFrame(drawParticles);
+  }
+  drawParticles();
+
+  // ── Card entrance ─────────────────────────────────────────────
+  const card    = document.getElementById('loginCard')!;
+  const logo    = document.querySelector<HTMLElement>('.login-logo')!;
+  const inputs  = document.querySelectorAll<HTMLElement>('.form-group');
+  const btn     = document.getElementById('loginBtn')!;
+  const hasError = !!document.querySelector('.alert-error');
+
+  gsap.set(card, { opacity: 0, y: 48, scale: 0.94 });
+  gsap.set(logo, { scale: 0, rotation: -180 });
+
+  const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
+  tl.to(card, { opacity: 1, y: 0, scale: 1, duration: 0.65 })
+    .to(logo, { scale: 1, rotation: 0, duration: 0.55, ease: 'back.out(1.8)' }, '-=0.3')
+    .from('.login-header h1', { opacity: 0, y: 8, duration: 0.35 }, '-=0.1')
+    .from('.login-header p',  { opacity: 0, y: 6, duration: 0.3  }, '-=0.2')
+    .from(inputs, { opacity: 0, x: -18, duration: 0.35, stagger: 0.1 }, '-=0.15')
+    .from(btn,    { opacity: 0, y: 10,  duration: 0.3  }, '-=0.1');
+
+  // ── Error shake ────────────────────────────────────────────────
+  if (hasError) {
+    const alertEl = document.querySelector<HTMLElement>('.alert-error')!;
+    gsap.from(alertEl, { opacity: 0, y: -8, duration: 0.3, ease: 'power2.out' });
+    gsap.fromTo(card,
+      { x: -10 },
+      { x: 0, duration: 0.5, ease: 'elastic.out(1, 0.4)', delay: 0.1 }
+    );
+  }
+
+  // ── Input focus micro-animation ────────────────────────────────
+  document.querySelectorAll<HTMLElement>('.form-control').forEach(el => {
+    el.addEventListener('focus', () => gsap.to(el, { scale: 1.015, duration: 0.2 }));
+    el.addEventListener('blur',  () => gsap.to(el, { scale: 1,     duration: 0.2 }));
+  });
+
+  // ── Submit loading state ───────────────────────────────────────
+  document.querySelector('form')!.addEventListener('submit', () => {
+    btn.innerHTML = '<span class="material-icons-round ui-spinner">refresh</span> Verificando…';
+    (btn as HTMLButtonElement).disabled = true;
+    gsap.to(btn, { scale: 0.97, duration: 0.1, yoyo: true, repeat: 1 });
+  });
+</script>

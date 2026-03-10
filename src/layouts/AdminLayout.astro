@@ -70,9 +70,9 @@ const configItems = [
       <div class="nav-section">
         <span class="nav-section-title">Principal</span>
         {menuItems.map(item => (
-          <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]}>
+          <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]} title={item.label}>
             <span class="material-icons-round">{item.icon}</span>
-            {item.label}
+            <span class="nav-link-label">{item.label}</span>
           </a>
         ))}
       </div>
@@ -80,9 +80,9 @@ const configItems = [
       <div class="nav-section">
         <span class="nav-section-title">Gestión de Cobros</span>
         {cobrosItems.map(item => (
-          <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]}>
+          <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]} title={item.label}>
             <span class="material-icons-round">{item.icon}</span>
-            {item.label}
+            <span class="nav-link-label">{item.label}</span>
           </a>
         ))}
       </div>
@@ -90,9 +90,9 @@ const configItems = [
       <div class="nav-section">
         <span class="nav-section-title">Control de Inventario</span>
         {inventarioItems.map(item => (
-          <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]}>
+          <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]} title={item.label}>
             <span class="material-icons-round">{item.icon}</span>
-            {item.label}
+            <span class="nav-link-label">{item.label}</span>
           </a>
         ))}
       </div>
@@ -100,9 +100,9 @@ const configItems = [
       <div class="nav-section">
         <span class="nav-section-title">Reportes</span>
         {reportesItems.map(item => (
-          <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]}>
+          <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]} title={item.label}>
             <span class="material-icons-round">{item.icon}</span>
-            {item.label}
+            <span class="nav-link-label">{item.label}</span>
           </a>
         ))}
       </div>
@@ -110,9 +110,9 @@ const configItems = [
       <div class="nav-section">
         <span class="nav-section-title">Configuración</span>
         {configItems.map(item => (
-          <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]}>
+          <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]} title={item.label}>
             <span class="material-icons-round">{item.icon}</span>
-            {item.label}
+            <span class="nav-link-label">{item.label}</span>
           </a>
         ))}
       </div>
@@ -123,7 +123,7 @@ const configItems = [
   <div class="main-wrapper">
     <!-- Navbar -->
     <header class="navbar">
-      <button class="menu-toggle" id="menuToggle" aria-label="Toggle menu">
+      <button class="menu-toggle" id="menuToggle" aria-label="Toggle menu" title="Colapsar menú">
         <span class="material-icons-round">menu</span>
       </button>
 
@@ -155,7 +155,7 @@ const configItems = [
 </html>
 
 <style>
-  /* Sidebar */
+  /* ─── Sidebar ─────────────────────────────────────────────── */
   .sidebar {
     position: fixed;
     top: 0;
@@ -167,7 +167,8 @@ const configItems = [
     display: flex;
     flex-direction: column;
     z-index: 100;
-    transition: transform 0.3s;
+    transition: width 0.25s ease, transform 0.25s ease;
+    overflow: hidden;
   }
 
   .sidebar-header {
@@ -177,18 +178,25 @@ const configItems = [
     padding: 16px 20px;
     border-bottom: 1px solid rgba(255,255,255,0.1);
     flex-shrink: 0;
+    white-space: nowrap;
   }
 
   .sidebar-brand {
     font-size: 1.1rem;
     font-weight: 700;
+    transition: opacity 0.2s, width 0.2s;
   }
 
   .sidebar-nav {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 8px 0;
   }
+
+  /* hide scrollbar when collapsed */
+  .sidebar-nav::-webkit-scrollbar { width: 4px; }
+  .sidebar-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
 
   .nav-section {
     padding: 8px 12px;
@@ -202,6 +210,8 @@ const configItems = [
     color: rgba(255,255,255,0.4);
     padding: 8px 12px 4px;
     font-weight: 600;
+    white-space: nowrap;
+    transition: opacity 0.2s;
   }
 
   .nav-link {
@@ -212,7 +222,9 @@ const configItems = [
     border-radius: 8px;
     font-size: 0.9rem;
     color: rgba(255,255,255,0.7);
-    transition: all 0.2s;
+    transition: background 0.2s, color 0.2s, padding 0.25s, justify-content 0.25s;
+    white-space: nowrap;
+    text-decoration: none;
   }
 
   .nav-link:hover {
@@ -227,15 +239,51 @@ const configItems = [
 
   .nav-link .material-icons-round {
     font-size: 20px;
+    flex-shrink: 0;
   }
 
-  /* Main wrapper */
+  .nav-link-label {
+    transition: opacity 0.2s;
+  }
+
+  /* ─── Collapsed state (desktop) ──────────────────────────── */
+  .sidebar.collapsed {
+    width: 64px;
+  }
+
+  .sidebar.collapsed .sidebar-brand {
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+  }
+
+  .sidebar.collapsed .nav-section-title {
+    opacity: 0;
+  }
+
+  .sidebar.collapsed .nav-link {
+    justify-content: center;
+    padding: 10px 0;
+  }
+
+  .sidebar.collapsed .nav-link-label {
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+  }
+
+  /* ─── Main wrapper ────────────────────────────────────────── */
   .main-wrapper {
     margin-left: var(--sidebar-width);
     min-height: 100vh;
+    transition: margin-left 0.25s ease;
   }
 
-  /* Navbar */
+  .sidebar.collapsed + .main-wrapper {
+    margin-left: 64px;
+  }
+
+  /* ─── Navbar ──────────────────────────────────────────────── */
   .navbar {
     position: sticky;
     top: 0;
@@ -251,12 +299,21 @@ const configItems = [
   }
 
   .menu-toggle {
-    display: none;
     background: none;
     border: none;
     font-size: 1.5rem;
     color: var(--text);
     margin-right: auto;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    transition: background 0.2s;
+  }
+
+  .menu-toggle:hover {
+    background: var(--bg);
   }
 
   .navbar-right {
@@ -310,6 +367,7 @@ const configItems = [
     border-radius: var(--radius);
     color: var(--danger);
     font-size: 0.85rem;
+    cursor: pointer;
     transition: all 0.2s;
   }
 
@@ -322,14 +380,15 @@ const configItems = [
     font-size: 18px;
   }
 
-  /* Content */
+  /* ─── Content ─────────────────────────────────────────────── */
   .content {
     padding: 24px;
   }
 
-  /* Responsive */
+  /* ─── Mobile ──────────────────────────────────────────────── */
   @media (max-width: 768px) {
     .sidebar {
+      width: var(--sidebar-width) !important; /* restore full width on mobile */
       transform: translateX(-100%);
     }
 
@@ -337,37 +396,73 @@ const configItems = [
       transform: translateX(0);
     }
 
-    .main-wrapper {
+    /* Remove collapsed icon-only mode on mobile */
+    .sidebar.collapsed {
+      width: var(--sidebar-width) !important;
+    }
+
+    .sidebar.collapsed .sidebar-brand { opacity: 1; width: auto; overflow: visible; }
+    .sidebar.collapsed .nav-section-title { opacity: 1; }
+    .sidebar.collapsed .nav-link { justify-content: flex-start; padding: 10px 12px; }
+    .sidebar.collapsed .nav-link-label { opacity: 1; width: auto; overflow: visible; }
+
+    .main-wrapper,
+    .sidebar.collapsed + .main-wrapper {
       margin-left: 0;
     }
 
-    .menu-toggle {
-      display: block;
-    }
-
-    .user-details {
+    /* Mobile overlay backdrop */
+    .sidebar-backdrop {
       display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 99;
     }
+    .sidebar-backdrop.visible { display: block; }
 
-    .logout-text {
-      display: none;
-    }
+    .user-details { display: none; }
+    .logout-text  { display: none; }
   }
 </style>
 
-<script>
-  const toggle = document.getElementById('menuToggle');
-  const sidebar = document.getElementById('sidebar');
+<!-- Backdrop for mobile -->
+<div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
-  toggle?.addEventListener('click', () => {
-    sidebar?.classList.toggle('open');
+<script>
+  const toggle   = document.getElementById('menuToggle')!;
+  const sidebar  = document.getElementById('sidebar')!;
+  const backdrop = document.getElementById('sidebarBackdrop')!;
+  const isMobile = () => window.innerWidth <= 768;
+
+  // Restore desktop collapse state from localStorage
+  if (!isMobile() && localStorage.getItem('sidebarCollapsed') === 'true') {
+    sidebar.classList.add('collapsed');
+  }
+
+  toggle.addEventListener('click', () => {
+    if (isMobile()) {
+      // Mobile: slide in/out
+      const isOpen = sidebar.classList.toggle('open');
+      backdrop.classList.toggle('visible', isOpen);
+    } else {
+      // Desktop: collapse / expand
+      const isCollapsed = sidebar.classList.toggle('collapsed');
+      localStorage.setItem('sidebarCollapsed', String(isCollapsed));
+    }
   });
 
-  // Close sidebar on navigation (mobile)
-  document.addEventListener('click', (e) => {
-    const target = e.target as HTMLElement;
-    if (sidebar?.classList.contains('open') && !sidebar.contains(target) && target !== toggle) {
+  // Close on backdrop click (mobile)
+  backdrop.addEventListener('click', () => {
+    sidebar.classList.remove('open');
+    backdrop.classList.remove('visible');
+  });
+
+  // Re-evaluate on resize
+  window.addEventListener('resize', () => {
+    if (!isMobile()) {
       sidebar.classList.remove('open');
+      backdrop.classList.remove('visible');
     }
   });
 </script>

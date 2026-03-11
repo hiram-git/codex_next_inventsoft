@@ -445,112 +445,162 @@ const configItems = [
   }
 
   /* ─── DataTable: search + pagination ─────────────────── */
+
+  /* Toolbar: separador visual con la tabla */
   .dt-toolbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 0 0 12px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 0;
     flex-wrap: wrap;
   }
 
+  /* Texto "Mostrando X–Y de Z" — igual que labels de formulario */
   .dt-info {
     font-size: 0.8rem;
     color: var(--text-muted);
-    white-space: nowrap;
+    font-weight: 500;
   }
 
+  /* Campo de búsqueda — réplica exacta de .form-control con ícono */
   .dt-search-box {
     display: flex;
     align-items: center;
     gap: 6px;
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 6px 10px;
-    background: white;
-    min-width: 220px;
-    transition: border-color 0.2s, box-shadow 0.2s;
+    padding: 7px 10px;
+    background: var(--bg);        /* mismo fondo que th y sidebar */
+    min-width: 240px;
+    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
   }
 
   .dt-search-box:focus-within {
     border-color: var(--primary);
     box-shadow: 0 0 0 3px var(--primary-light);
+    background: var(--bg-card);   /* blanco al enfocar, igual que form-control */
   }
 
   .dt-search-box .material-icons-round {
-    font-size: 18px;
+    font-size: 17px;
     color: var(--text-muted);
     flex-shrink: 0;
+    pointer-events: none;
   }
 
   .dt-search {
     border: none;
     outline: none;
-    background: none;
+    background: transparent;
     font-size: 0.875rem;
+    color: var(--text);
     flex: 1;
     min-width: 0;
-    color: var(--text);
+    font-family: inherit;
   }
+
+  .dt-search::placeholder { color: var(--text-muted); }
 
   .dt-clear {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--text-muted);
-    padding: 0;
     display: flex;
     align-items: center;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    padding: 1px;
     border-radius: 4px;
-    transition: color 0.15s;
+    transition: color 0.15s, background 0.15s;
+    flex-shrink: 0;
   }
 
-  .dt-clear:hover { color: var(--text); }
-  .dt-clear .material-icons-round { font-size: 16px; }
+  .dt-clear:hover {
+    color: var(--danger);
+    background: #fef2f2;
+  }
 
+  .dt-clear .material-icons-round { font-size: 15px; }
+
+  /* Footer: separador superior simétrico con el toolbar */
   .dt-footer {
     display: flex;
-    justify-content: flex-end;
-    padding: 12px 0 0;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+    margin-top: 0;
+    gap: 12px;
   }
 
   .dt-pages {
     display: flex;
     align-items: center;
-    gap: 3px;
+    gap: 4px;
     flex-wrap: wrap;
   }
 
+  /* Botones de página — mismas proporciones que .btn-sm */
   .dt-page-btn {
-    min-width: 34px;
-    height: 34px;
-    padding: 0 6px;
+    min-width: 32px;
+    height: 32px;
+    padding: 0 8px;
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    background: white;
-    font-size: 0.85rem;
+    background: var(--bg-card);
+    color: var(--text);
+    font-size: 0.82rem;
+    font-weight: 500;
+    font-family: inherit;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     transition: background 0.15s, border-color 0.15s, color 0.15s;
+    line-height: 1;
   }
 
-  .dt-page-btn:hover:not(:disabled) {
+  .dt-page-btn:hover:not(:disabled):not(.active) {
     background: var(--primary-light);
     border-color: var(--primary);
     color: var(--primary);
   }
 
+  /* Página activa — igual que .btn-primary */
   .dt-page-btn.active {
     background: var(--primary);
     color: white;
     border-color: var(--primary);
     font-weight: 600;
+    box-shadow: var(--shadow);
   }
 
-  .dt-page-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-  .dt-ellipsis { padding: 0 4px; color: var(--text-muted); font-size: 0.85rem; }
+  /* Prev/Next — ligeramente diferenciados como botones de navegación */
+  .dt-prev, .dt-next {
+    background: var(--bg);
+    color: var(--text-muted);
+  }
+
+  .dt-prev:hover:not(:disabled), .dt-next:hover:not(:disabled) {
+    background: var(--primary-light);
+    border-color: var(--primary);
+    color: var(--primary);
+  }
+
+  .dt-page-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    background: var(--bg);
+  }
+
+  .dt-ellipsis {
+    min-width: 24px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    user-select: none;
+  }
 
   /* ─── Content ─────────────────────────────────────────────── */
   .content {

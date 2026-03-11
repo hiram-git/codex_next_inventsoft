@@ -50,7 +50,7 @@ const almacenes = await store.getAlmacenes();
   {mensaje && <div class={`alert alert-${tipoMensaje}`}>{mensaje}</div>}
 
   <div class="card">
-    <table>
+    <table data-searchable>
       <thead>
         <tr>
           <th>Nombre</th>

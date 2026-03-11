@@ -36,7 +36,6 @@ function toast(message: string, type: ToastType = 'success', duration = 3500) {
 
   container.appendChild(el);
 
-  // Entrance
   gsap.fromTo(el,
     { x: 80, opacity: 0 },
     { x: 0, opacity: 1, duration: 0.35, ease: 'power3.out' }
@@ -73,16 +72,10 @@ function btnLoading(btn: HTMLButtonElement, text = 'Procesando…'): () => void 
 // ─── Page entrance animations ─────────────────────────────────────────────────
 function initEntranceAnimations() {
   const tl = gsap.timeline({ defaults: { ease: 'power2.out' } });
-
   const header = document.querySelector<HTMLElement>('.page-header');
-  if (header) {
-    tl.from(header, { opacity: 0, y: -14, duration: 0.35 }, 0);
-  }
-
+  if (header) tl.from(header, { opacity: 0, y: -14, duration: 0.35 }, 0);
   const cards = document.querySelectorAll<HTMLElement>('.card');
-  if (cards.length) {
-    tl.from(cards, { opacity: 0, y: 18, duration: 0.4, stagger: 0.07 }, 0.05);
-  }
+  if (cards.length) tl.from(cards, { opacity: 0, y: 18, duration: 0.4, stagger: 0.07 }, 0.05);
 }
 
 // ─── Button ripple ────────────────────────────────────────────────────────────
@@ -90,26 +83,14 @@ function initRipple() {
   document.addEventListener('click', (e: MouseEvent) => {
     const btn = (e.target as HTMLElement).closest<HTMLElement>('.btn');
     if (!btn || (btn as HTMLButtonElement).disabled) return;
-
     const rect = btn.getBoundingClientRect();
     const size = Math.max(rect.width, rect.height) * 1.5;
     const ripple = document.createElement('span');
-    ripple.style.cssText = `
-      position:absolute; pointer-events:none; border-radius:50%;
-      width:${size}px; height:${size}px;
-      left:${e.clientX - rect.left - size / 2}px;
-      top:${e.clientY - rect.top - size / 2}px;
-      background:rgba(255,255,255,0.28);`;
-
+    ripple.style.cssText = `position:absolute;pointer-events:none;border-radius:50%;width:${size}px;height:${size}px;left:${e.clientX - rect.left - size / 2}px;top:${e.clientY - rect.top - size / 2}px;background:rgba(255,255,255,0.28);`;
     btn.style.position = 'relative';
     btn.style.overflow = 'hidden';
     btn.appendChild(ripple);
-
-    gsap.fromTo(ripple,
-      { scale: 0, opacity: 1 },
-      { scale: 1, opacity: 0, duration: 0.55, ease: 'power2.out',
-        onComplete: () => ripple.remove() }
-    );
+    gsap.fromTo(ripple, { scale: 0, opacity: 1 }, { scale: 1, opacity: 0, duration: 0.55, ease: 'power2.out', onComplete: () => ripple.remove() });
   });
 }
 
@@ -131,10 +112,126 @@ function initInputFocus() {
   });
 }
 
+// ─── DataTable: search + pagination ──────────────────────────────────────────
+function debounce<T extends (...args: any[]) => void>(fn: T, ms: number): T {
+  let timer: ReturnType<typeof setTimeout>;
+  return ((...args: any[]) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); }) as T;
+}
+
+function pageRange(current: number, total: number): (number | '…')[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const out: (number | '…')[] = [1];
+  if (current > 3) out.push('…');
+  for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) out.push(i);
+  if (current < total - 2) out.push('…');
+  out.push(total);
+  return out;
+}
+
+function initDataTables() {
+  document.querySelectorAll<HTMLTableElement>('table[data-searchable]').forEach(table => {
+    const pageSize = parseInt(table.dataset.pageSize ?? '20');
+    const tbody = table.querySelector('tbody');
+    if (!tbody) return;
+
+    // Auto-detect empty-state row: single cell spanning multiple columns
+    const allTbodyRows = Array.from(tbody.querySelectorAll<HTMLTableRowElement>('tr'));
+    const emptyRow = allTbodyRows.find(r => r.cells.length === 1 && r.cells[0].colSpan > 1) ?? null;
+    const dataRows = allTbodyRows.filter(r => r !== emptyRow);
+
+    let filteredRows = [...dataRows];
+    let currentPage = 1;
+
+    // ── Toolbar (search bar) ──────────────────────────────────────────────────
+    const toolbar = document.createElement('div');
+    toolbar.className = 'dt-toolbar';
+    toolbar.innerHTML = `
+      <span class="dt-info"></span>
+      <div class="dt-search-box">
+        <span class="material-icons-round">search</span>
+        <input type="text" class="dt-search" placeholder="Buscar…" autocomplete="off" />
+        <button class="dt-clear" title="Limpiar búsqueda" style="display:none">
+          <span class="material-icons-round">close</span>
+        </button>
+      </div>`;
+    table.parentElement!.insertBefore(toolbar, table);
+
+    // ── Footer (pagination) ───────────────────────────────────────────────────
+    const footer = document.createElement('div');
+    footer.className = 'dt-footer';
+    table.after(footer);
+
+    const infoEl   = toolbar.querySelector<HTMLElement>('.dt-info')!;
+    const searchEl = toolbar.querySelector<HTMLInputElement>('.dt-search')!;
+    const clearBtn = toolbar.querySelector<HTMLButtonElement>('.dt-clear')!;
+
+    function render() {
+      const total      = filteredRows.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      currentPage      = Math.min(currentPage, totalPages);
+      const start      = (currentPage - 1) * pageSize;
+      const end        = Math.min(start + pageSize, total);
+
+      // Rows visibility
+      dataRows.forEach(r => (r.style.display = 'none'));
+      filteredRows.slice(start, end).forEach(r => (r.style.display = ''));
+      if (emptyRow) emptyRow.style.display = total === 0 ? '' : 'none';
+
+      // Info text
+      infoEl.innerHTML = total === 0
+        ? 'Sin resultados'
+        : `Mostrando <strong>${start + 1}–${end}</strong> de <strong>${total}</strong>`;
+
+      // Pagination buttons
+      if (totalPages <= 1) { footer.innerHTML = ''; return; }
+
+      const btns = pageRange(currentPage, totalPages).map(p =>
+        p === '…'
+          ? `<span class="dt-ellipsis">…</span>`
+          : `<button class="dt-page-btn${p === currentPage ? ' active' : ''}" data-p="${p}">${p}</button>`
+      );
+      footer.innerHTML = `
+        <div class="dt-pages">
+          <button class="dt-page-btn dt-prev" data-p="prev" ${currentPage === 1 ? 'disabled' : ''}>
+            <span class="material-icons-round" style="font-size:16px">chevron_left</span>
+          </button>
+          ${btns.join('')}
+          <button class="dt-page-btn dt-next" data-p="next" ${currentPage === totalPages ? 'disabled' : ''}>
+            <span class="material-icons-round" style="font-size:16px">chevron_right</span>
+          </button>
+        </div>`;
+
+      footer.querySelectorAll<HTMLButtonElement>('[data-p]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const p = btn.dataset.p!;
+          if (p === 'prev') currentPage = Math.max(1, currentPage - 1);
+          else if (p === 'next') currentPage = Math.min(totalPages, currentPage + 1);
+          else currentPage = parseInt(p);
+          render();
+          table.closest('.card')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+      });
+    }
+
+    function filter() {
+      const q = searchEl.value.toLowerCase().trim();
+      filteredRows = q
+        ? dataRows.filter(r => r.textContent!.toLowerCase().includes(q))
+        : [...dataRows];
+      currentPage = 1;
+      clearBtn.style.display = q ? '' : 'none';
+      render();
+    }
+
+    searchEl.addEventListener('input', debounce(filter, 200));
+    clearBtn.addEventListener('click', () => { searchEl.value = ''; filter(); searchEl.focus(); });
+
+    render(); // initial
+  });
+}
+
 // ─── Bootstrap ───────────────────────────────────────────────────────────────
 const ui: UI = { toast, btnLoading };
-
-// Expose globally so inline scripts (onclick handlers, fetch callbacks) can use it
 (window as any).ui = ui;
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -142,4 +239,5 @@ document.addEventListener('DOMContentLoaded', () => {
   initRipple();
   initFormLoading();
   initInputFocus();
+  initDataTables();
 });

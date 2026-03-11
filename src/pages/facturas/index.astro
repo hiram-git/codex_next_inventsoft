@@ -32,7 +32,7 @@ const facturas = await store.getFacturas();
   {mensaje && <div class={`alert alert-${tipoMensaje}`}>{mensaje}</div>}
 
   <div class="card">
-    <table>
+    <table data-searchable>
       <thead>
         <tr>
           <th>Número</th>

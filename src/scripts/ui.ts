@@ -142,6 +142,9 @@ function initDataTables() {
     let filteredRows = [...dataRows];
     let currentPage = 1;
 
+    // Mark parent card so CSS can remove its padding and go full-bleed
+    table.closest<HTMLElement>('.card')?.classList.add('card--table');
+
     // ── Toolbar (search bar) ──────────────────────────────────────────────────
     const toolbar = document.createElement('div');
     toolbar.className = 'dt-toolbar';

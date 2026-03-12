@@ -177,6 +177,8 @@ const productos = (await store.getProductos())
             <span class="material-icons-round" style="font-size:36px;color:var(--border)">add_shopping_cart</span>
             <span>Selecciona productos del catálogo</span>
           </div>
+          <!-- contenedor de ítems: nunca mueve el #orderEmpty del DOM -->
+          <div id="orderList"></div>
         </div>
 
         <!-- Totales -->
@@ -548,6 +550,12 @@ const productos = (await store.getProductos())
     font-size: 0.83rem;
   }
 
+  #orderList {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
   /* Fila de ítem en orden */
   .order-item {
     background: var(--bg);
@@ -852,37 +860,37 @@ const productos = (await store.getProductos())
   }
 
   // ── Render del panel de orden ──────────────────────────────────
+  // #orderEmpty y #orderList son siempre hijos de #orderItems y nunca
+  // se eliminan del DOM — solo se muestra/oculta #orderEmpty para evitar
+  // que document.getElementById('orderEmpty') devuelva null (el bug original).
   function renderOrder(keepFocusId = null) {
-    const items    = [...order.values()];
-    const container = document.getElementById('orderItems');
-    const emptyEl  = document.getElementById('orderEmpty');
-    const totals   = document.getElementById('orderTotals');
-    const countEl  = document.getElementById('orderCount');
+    const items     = [...order.values()];
+    const listEl    = document.getElementById('orderList');
+    const emptyEl   = document.getElementById('orderEmpty');
+    const totals    = document.getElementById('orderTotals');
+    const countEl   = document.getElementById('orderCount');
     const submitBtn = document.getElementById('submitBtn');
 
     countEl.textContent = items.length === 1 ? '1 ítem' : `${items.length} ítems`;
     submitBtn.disabled  = items.length === 0;
 
+    emptyEl.style.display = items.length === 0 ? 'flex' : 'none';
+    totals.style.display  = items.length === 0 ? 'none'  : 'flex';
+
     if (items.length === 0) {
-      container.innerHTML = '';
-      container.appendChild(emptyEl);
-      emptyEl.style.display = 'flex';
-      totals.style.display = 'none';
+      listEl.innerHTML = '';
       return;
     }
 
-    emptyEl.style.display = 'none';
-    totals.style.display  = 'flex';
-
     // Guardar notas antes de re-renderizar
-    container.querySelectorAll('.order-item').forEach(row => {
+    listEl.querySelectorAll('.order-item').forEach(row => {
       const id = row.dataset.id;
       if (order.has(id)) {
         order.get(id).notas = row.querySelector('.order-item-notas')?.value ?? '';
       }
     });
 
-    container.innerHTML = items.map(item => `
+    listEl.innerHTML = items.map(item => `
       <div class="order-item" data-id="${item.id}">
         <div class="order-item-top">
           <div class="order-item-name">${item.nombre}</div>
@@ -913,28 +921,28 @@ const productos = (await store.getProductos())
       </div>
     `).join('');
 
-    // Eventos qty
-    container.querySelectorAll('[data-dec]').forEach(btn =>
+    // Eventos qty / notas / eliminar
+    listEl.querySelectorAll('[data-dec]').forEach(btn =>
       btn.addEventListener('click', () => {
         const id = btn.dataset.dec;
         const cur = order.get(id);
         if (cur) setQty(id, cur.cantidad - 1);
       })
     );
-    container.querySelectorAll('[data-inc]').forEach(btn =>
+    listEl.querySelectorAll('[data-inc]').forEach(btn =>
       btn.addEventListener('click', () => {
         const id = btn.dataset.inc;
         const cur = order.get(id);
         if (cur) setQty(id, cur.cantidad + 1);
       })
     );
-    container.querySelectorAll('[data-qty]').forEach(input => {
+    listEl.querySelectorAll('[data-qty]').forEach(input => {
       input.addEventListener('change', () => setQty(input.dataset.qty, input.value));
     });
-    container.querySelectorAll('[data-remove]').forEach(btn =>
+    listEl.querySelectorAll('[data-remove]').forEach(btn =>
       btn.addEventListener('click', () => removeFromOrder(btn.dataset.remove))
     );
-    container.querySelectorAll('[data-nota]').forEach(ta => {
+    listEl.querySelectorAll('[data-nota]').forEach(ta => {
       ta.addEventListener('input', () => {
         if (order.has(ta.dataset.nota)) order.get(ta.dataset.nota).notas = ta.value;
       });

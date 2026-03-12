@@ -10,21 +10,55 @@ if (session) {
   return Astro.redirect('/dashboard');
 }
 
-let error = '';
+// ── Tipos de error y sus mensajes ─────────────────────────────────────────
+const ERROR_MESSAGES: Record<string, { msg: string; icon: string }> = {
+  credentials:     { msg: 'Credenciales inválidas. Verifique su correo y contraseña.',        icon: 'lock'           },
+  inactive:        { msg: 'Su cuenta está desactivada. Contacte al administrador.',           icon: 'person_off'     },
+  session_expired: { msg: 'Su sesión ha expirado. Por favor inicie sesión nuevamente.',       icon: 'timer_off'      },
+  unauthorized:    { msg: 'Acceso denegado. No tiene permisos para esa sección.',             icon: 'block'          },
+  invalid_token:   { msg: 'Token de sesión inválido. Por favor inicie sesión nuevamente.',    icon: 'key'            },
+  invalid_license: { msg: 'Licencia inválida o expirada. Contacte al administrador.',        icon: 'verified_user'  },
+  system_error:    { msg: 'Error del sistema. Por favor intente nuevamente más tarde.',       icon: 'error'          },
+};
 
-if (Astro.request.method === 'POST') {
-  const formData = await Astro.request.formData();
-  const email = formData.get('email')?.toString() ?? '';
-  const password = formData.get('password')?.toString() ?? '';
+let errorType = '';
+let errorMsg  = '';
 
-  const user = await store.getUsuarioByEmail(email);
-  const passwordValid = user ? await bcrypt.compare(password, user.password) : false;
-  if (user && passwordValid && user.activo) {
-    login(Astro.cookies, user.id);
-    return Astro.redirect('/dashboard');
-  }
-  error = 'Credenciales inválidas. Intente nuevamente.';
+// Errores desde query param (ej: redirect desde middleware → ?error=session_expired)
+const urlError = Astro.url.searchParams.get('error') ?? '';
+if (urlError && ERROR_MESSAGES[urlError]) {
+  errorType = urlError;
+  errorMsg  = ERROR_MESSAGES[urlError].msg;
 }
+
+// Errores desde POST (credenciales)
+if (Astro.request.method === 'POST') {
+  try {
+    const formData = await Astro.request.formData();
+    const email    = formData.get('email')?.toString() ?? '';
+    const password = formData.get('password')?.toString() ?? '';
+
+    const user          = await store.getUsuarioByEmail(email);
+    const passwordValid = user ? await bcrypt.compare(password, user.password) : false;
+
+    if (user && passwordValid) {
+      if (!user.activo) {
+        errorType = 'inactive';
+      } else {
+        login(Astro.cookies, user.id);
+        return Astro.redirect('/dashboard');
+      }
+    } else {
+      errorType = 'credentials';
+    }
+    errorMsg = ERROR_MESSAGES[errorType].msg;
+  } catch {
+    errorType = 'system_error';
+    errorMsg  = ERROR_MESSAGES.system_error.msg;
+  }
+}
+
+const errorIcon = errorType ? ERROR_MESSAGES[errorType].icon : '';
 ---
 
 <html lang="es">
@@ -52,7 +86,16 @@ if (Astro.request.method === 'POST') {
         <p>Ingrese sus credenciales para acceder</p>
       </div>
 
-      {error && <div class="alert alert-error">{error}</div>}
+      {errorMsg && (
+        <div
+          id="errorCallout"
+          class="error-callout"
+          data-error-type={errorType}
+        >
+          <span class="material-icons-round error-callout-icon">{errorIcon}</span>
+          <span class="error-callout-msg">{errorMsg}</span>
+        </div>
+      )}
 
       <form method="POST">
         <div class="form-group">
@@ -125,6 +168,56 @@ if (Astro.request.method === 'POST') {
     font-size: 0.9rem;
   }
 
+  /* ── Error callout ── */
+  .error-callout {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    border-left: 4px solid var(--danger);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 20px;
+    color: #991b1b;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    /* empieza invisible; GSAP lo anima */
+    opacity: 0;
+  }
+
+  .error-callout-icon {
+    font-size: 18px !important;
+    color: var(--danger);
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  /* Colores alternativos según tipo */
+  .error-callout[data-error-type="session_expired"],
+  .error-callout[data-error-type="unauthorized"],
+  .error-callout[data-error-type="invalid_token"] {
+    background: #fff7ed;
+    border-color: #fdba74;
+    border-left-color: #f97316;
+    color: #9a3412;
+  }
+  .error-callout[data-error-type="session_expired"] .error-callout-icon,
+  .error-callout[data-error-type="unauthorized"] .error-callout-icon,
+  .error-callout[data-error-type="invalid_token"] .error-callout-icon {
+    color: #f97316;
+  }
+
+  .error-callout[data-error-type="system_error"] {
+    background: #faf5ff;
+    border-color: #d8b4fe;
+    border-left-color: #9333ea;
+    color: #581c87;
+  }
+  .error-callout[data-error-type="system_error"] .error-callout-icon {
+    color: #9333ea;
+  }
+
   .login-btn {
     width: 100%;
     padding: 12px;
@@ -148,8 +241,8 @@ if (Astro.request.method === 'POST') {
   import { gsap } from 'gsap';
 
   // ── Background particles ──────────────────────────────────────
-  const canvas  = document.getElementById('bg-canvas') as HTMLCanvasElement;
-  const ctx     = canvas.getContext('2d')!;
+  const canvas = document.getElementById('bg-canvas') as HTMLCanvasElement;
+  const ctx    = canvas.getContext('2d')!;
   const W = () => canvas.width  = window.innerWidth;
   const H = () => canvas.height = window.innerHeight;
   W(); H();
@@ -182,17 +275,17 @@ if (Astro.request.method === 'POST') {
   }
   drawParticles();
 
-  // ── Card entrance ─────────────────────────────────────────────
-  const card    = document.getElementById('loginCard')!;
-  const logo    = document.querySelector<HTMLElement>('.login-logo')!;
-  const inputs  = document.querySelectorAll<HTMLElement>('.form-group');
-  const btn     = document.getElementById('loginBtn')!;
-  const h1      = document.querySelector<HTMLElement>('.login-header h1')!;
-  const subtitle= document.querySelector<HTMLElement>('.login-header p')!;
-  const hasError = !!document.querySelector('.alert-error');
+  // ── Elementos ─────────────────────────────────────────────────
+  const card         = document.getElementById('loginCard')!;
+  const logo         = document.querySelector<HTMLElement>('.login-logo')!;
+  const inputs       = document.querySelectorAll<HTMLElement>('.form-group');
+  const btn          = document.getElementById('loginBtn')!;
+  const h1           = document.querySelector<HTMLElement>('.login-header h1')!;
+  const subtitle     = document.querySelector<HTMLElement>('.login-header p')!;
+  const errorCallout = document.getElementById('errorCallout') as HTMLElement | null;
 
-  // Set EVERY element's initial state explicitly — avoids gsap.from() capturing
-  // inherited opacity:0 from parent (which would animate 0→0, staying invisible)
+  // Estado inicial explícito de cada elemento — evita que gsap.from()
+  // capture opacity:0 heredada del padre (animaría 0→0 quedando invisible)
   gsap.set(card,    { opacity: 0, y: 48, scale: 0.94 });
   gsap.set(logo,    { scale: 0, rotation: -180 });
   gsap.set(h1,      { opacity: 0, y: 8 });
@@ -200,7 +293,9 @@ if (Astro.request.method === 'POST') {
   gsap.set(inputs,  { opacity: 0, x: -18 });
   gsap.set(btn,     { opacity: 0, y: 10 });
 
+  // ── Timeline principal: entrada del card ───────────────────────
   const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
+
   tl.to(card,    { opacity: 1, y: 0, scale: 1, duration: 0.6 })
     .to(logo,    { scale: 1, rotation: 0, duration: 0.5, ease: 'back.out(1.8)' }, '-=0.25')
     .to(h1,      { opacity: 1, y: 0, duration: 0.3 }, '-=0.1')
@@ -208,14 +303,31 @@ if (Astro.request.method === 'POST') {
     .to(inputs,  { opacity: 1, x: 0, duration: 0.3, stagger: 0.1 }, '-=0.15')
     .to(btn,     { opacity: 1, y: 0, duration: 0.3 }, '-=0.05');
 
-  // ── Error shake ────────────────────────────────────────────────
-  if (hasError) {
-    const alertEl = document.querySelector<HTMLElement>('.alert-error')!;
-    gsap.from(alertEl, { opacity: 0, y: -8, duration: 0.3, ease: 'power2.out' });
-    gsap.fromTo(card,
-      { x: -10 },
-      { x: 0, duration: 0.5, ease: 'elastic.out(1, 0.4)', delay: 0.1 }
-    );
+  // ── Animación de error: fade-in + shake exagerado ──────────────
+  // Se ejecuta simultáneamente con la entrada del card (t=0 del timeline)
+  if (errorCallout) {
+    // Bloque 1 (t=0): fade-in del callout, simultáneo con la entrada del card
+    tl.to(errorCallout, {
+      opacity: 1,
+      duration: 0.4,
+      ease: 'power2.out',
+    }, 0);
+
+    // Bloque 2 (t=0.4): shake exagerado después de que el callout ya es visible
+    tl.to(errorCallout, {
+      keyframes: [
+        { x: -12, duration: 0.05 },
+        { x:  12, duration: 0.05 },
+        { x: -10, duration: 0.05 },
+        { x:  10, duration: 0.05 },
+        { x:  -8, duration: 0.05 },
+        { x:   8, duration: 0.05 },
+        { x:  -5, duration: 0.05 },
+        { x:   5, duration: 0.05 },
+        { x:   0, duration: 0.10 },
+      ],
+      ease: 'power2.inOut',
+    }, 0.4);
   }
 
   // ── Input focus micro-animation ────────────────────────────────
@@ -224,7 +336,7 @@ if (Astro.request.method === 'POST') {
     el.addEventListener('blur',  () => gsap.to(el, { scale: 1,     duration: 0.2 }));
   });
 
-  // ── Submit loading state ───────────────────────────────────────
+  // ── Submit: estado de carga ────────────────────────────────────
   document.querySelector('form')!.addEventListener('submit', () => {
     btn.innerHTML = '<span class="material-icons-round ui-spinner">refresh</span> Verificando…';
     (btn as HTMLButtonElement).disabled = true;

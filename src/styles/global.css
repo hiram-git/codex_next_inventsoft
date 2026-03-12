@@ -32,10 +32,21 @@
   }
 }
 
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+/* Reset base — dentro de @layer base para que las utilidades de Tailwind
+   (@layer utilities) puedan sobreescribir padding/margin sin conflictos.
+   El CSS propio del proyecto (fuera de @layer) sigue teniendo prioridad
+   sobre todo: .card { padding: 24px } gana siempre. */
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Cursor siempre visible independientemente del tema del SO */
+  *, *::before, *::after {
+    cursor: inherit;
+  }
 }
 
 :root {
@@ -66,10 +77,6 @@ body {
   cursor: default;
 }
 
-/* Ensure cursor is always visible regardless of OS cursor theme */
-*, *::before, *::after {
-  cursor: inherit;
-}
 a, button, [role="button"], select, label[for] {
   cursor: pointer;
 }

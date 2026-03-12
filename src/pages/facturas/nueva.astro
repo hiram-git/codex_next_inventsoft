@@ -193,6 +193,9 @@ const allItems = [
   .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 0.95rem; }
   .total-row + .total-row { border-top: 1px solid var(--border); }
   .total-final { font-size: 1.15rem; font-weight: 700; color: var(--primary); }
+</style>
+
+<style is:global>
   .search-dropdown {
     position: absolute; top: 100%; left: 0; right: 0; z-index: 200;
     background: white; border: 1px solid var(--border); border-radius: var(--radius);
@@ -200,19 +203,14 @@ const allItems = [
     margin-top: 2px;
   }
   .search-result-item {
-    padding: 9px 12px; cursor: pointer; border-bottom: 1px solid var(--border);
-    font-size: 0.875rem; display: flex; align-items: center; gap: 8px;
+    padding: 9px 14px; cursor: pointer; border-bottom: 1px solid var(--border);
+    font-size: 0.875rem; display: flex; align-items: center; gap: 10px;
   }
   .search-result-item:last-child { border-bottom: none; }
   .search-result-item:hover { background: #f0f7ff; }
-  .search-result-item .item-name { flex: 1; font-weight: 500; }
-  .search-result-item .item-price { color: var(--text-muted); font-size: 0.8rem; }
-  .search-result-item .item-badge {
-    font-size: 0.7rem; font-weight: 600; padding: 2px 7px; border-radius: 10px;
-  }
-  .badge-producto { background: #dcfce7; color: #16a34a; }
-  .badge-servicio { background: #ede9fe; color: #7c3aed; }
-  .badge-stock { color: var(--text-muted); font-size: 0.75rem; }
+  .search-result-item .item-name { flex: 1; font-weight: 500; color: var(--text); }
+  .search-result-item .item-price { color: var(--text-muted); font-size: 0.82rem; white-space: nowrap; }
+  .search-result-item .item-stock { color: var(--text-muted); font-size: 0.78rem; white-space: nowrap; }
 </style>
 
 <script is:inline>
@@ -234,12 +232,10 @@ const allItems = [
     var el = document.getElementById('searchResults');
     if (!results.length) { el.style.display = 'none'; return; }
     el.innerHTML = results.slice(0, 25).map(function(i) {
-      var badge = i.tipo === 'producto'
-        ? '<span class="item-badge badge-producto">Producto</span>'
-        : '<span class="item-badge badge-servicio">Servicio</span>';
       var stockInfo = i.tipo === 'producto'
-        ? '<span class="badge-stock">Stock: ' + i.stock + '</span>'
+        ? '<span class="item-stock">Stock: ' + i.stock + '</span>'
         : '';
+
       return '<div class="search-result-item"'
         + ' data-id="' + escHtml(i.id) + '"'
         + ' data-tipo="' + escHtml(i.tipo) + '"'
@@ -247,7 +243,6 @@ const allItems = [
         + ' data-precio="' + i.precio + '"'
         + ' data-stock="' + i.stock + '"'
         + ' onmousedown="selectItem(this)">'
-        + badge
         + '<span class="item-name">' + escHtml(i.nombre) + '</span>'
         + '<span class="item-price">' + fmt(i.precio) + '</span>'
         + stockInfo

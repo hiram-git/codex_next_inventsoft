@@ -1,3 +1,31 @@
+/* ─── Tailwind v4 — activado para adopción gradual ──────────────────────────
+   Las clases de Tailwind coexisten con el sistema CSS propio del proyecto.
+   Se usan primero en los componentes nuevos (DataTable); el resto del proyecto
+   sigue con las clases de global.css y AdminLayout sin cambios.
+   ─────────────────────────────────────────────────────────────────────────── */
+@import "tailwindcss";
+
+/* Variantes del sistema de diseño expuestas como tokens de Tailwind v4 */
+@theme {
+  --color-primary:       #2563eb;
+  --color-primary-dark:  #1d4ed8;
+  --color-primary-light: #dbeafe;
+  --color-muted:         #64748b;
+  --color-border:        #e2e8f0;
+  --color-card:          #ffffff;
+  --color-surface:       #f1f5f9;
+  --color-danger:        #dc2626;
+  --radius-card:         8px;
+}
+
+/* Componente: tarjeta que contiene una tabla — el JS añade esta clase */
+@layer components {
+  .card--table {
+    padding: 0 !important;
+    overflow: hidden;
+  }
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;

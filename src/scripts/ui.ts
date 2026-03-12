@@ -145,23 +145,38 @@ function initDataTables() {
     // Mark parent card so CSS can remove its padding and go full-bleed
     table.closest<HTMLElement>('.card')?.classList.add('card--table');
 
-    // ── Toolbar (search bar) ──────────────────────────────────────────────────
+    // ── Toolbar (search bar) — styled with Tailwind v4 ───────────────────────
     const toolbar = document.createElement('div');
-    toolbar.className = 'dt-toolbar';
+    toolbar.className = [
+      'flex items-center justify-between gap-3 flex-wrap',
+      'px-5 py-3',
+      'border-b border-border bg-card',
+    ].join(' ');
     toolbar.innerHTML = `
-      <span class="dt-info"></span>
-      <div class="dt-search-box">
-        <span class="material-icons-round">search</span>
-        <input type="text" class="dt-search" placeholder="Buscar…" autocomplete="off" />
-        <button class="dt-clear" title="Limpiar búsqueda" style="display:none">
-          <span class="material-icons-round">close</span>
+      <span class="dt-info text-[0.82rem] text-muted font-medium"></span>
+      <div class="dt-search-box flex items-center gap-1.5
+                  border border-border rounded-[var(--radius)]
+                  px-2.5 py-[6px] bg-card min-w-60
+                  transition-all duration-200
+                  focus-within:border-primary focus-within:ring-[3px] focus-within:ring-primary-light">
+        <span class="material-icons-round text-muted pointer-events-none select-none"
+              style="font-size:17px">search</span>
+        <input type="text"
+               class="dt-search flex-1 min-w-0 border-0 outline-none bg-transparent
+                      text-sm text-[var(--text)] font-[inherit]
+                      placeholder:text-muted"
+               placeholder="Buscar…" autocomplete="off" />
+        <button class="dt-clear flex items-center bg-transparent border-0 p-0.5 rounded
+                       text-muted transition-colors hover:text-danger hover:bg-red-50"
+                title="Limpiar búsqueda" style="display:none">
+          <span class="material-icons-round" style="font-size:15px">close</span>
         </button>
       </div>`;
     table.parentElement!.insertBefore(toolbar, table);
 
-    // ── Footer (pagination) ───────────────────────────────────────────────────
+    // ── Footer (pagination) — styled with Tailwind v4 ────────────────────────
     const footer = document.createElement('div');
-    footer.className = 'dt-footer';
+    footer.className = 'dt-footer flex items-center justify-end px-5 py-2.5 border-t border-border bg-card';
     table.after(footer);
 
     const infoEl   = toolbar.querySelector<HTMLElement>('.dt-info')!;
@@ -188,18 +203,32 @@ function initDataTables() {
       // Pagination buttons
       if (totalPages <= 1) { footer.innerHTML = ''; return; }
 
+      // Shared Tailwind classes for page buttons — Tailwind v4 scans these strings
+      const btnBase = [
+        'dt-page-btn',
+        'min-w-8 h-8 px-2',
+        'border rounded-[var(--radius)]',
+        'text-[0.82rem] font-medium font-[inherit]',
+        'inline-flex items-center justify-center',
+        'transition-all duration-150 leading-none cursor-pointer',
+        'disabled:opacity-40 disabled:cursor-not-allowed',
+      ].join(' ');
+      const btnActive  = 'bg-primary text-white border-primary font-semibold';
+      const btnDefault = 'bg-card text-[var(--text)] border-border hover:bg-primary-light hover:border-primary hover:text-primary';
+      const btnNav     = 'bg-card text-muted border-border hover:bg-primary-light hover:border-primary hover:text-primary';
+
       const btns = pageRange(currentPage, totalPages).map(p =>
         p === '…'
-          ? `<span class="dt-ellipsis">…</span>`
-          : `<button class="dt-page-btn${p === currentPage ? ' active' : ''}" data-p="${p}">${p}</button>`
+          ? `<span class="min-w-6 text-center text-muted text-[0.82rem] select-none">…</span>`
+          : `<button class="${btnBase} ${p === currentPage ? btnActive : btnDefault}" data-p="${p}">${p}</button>`
       );
       footer.innerHTML = `
-        <div class="dt-pages">
-          <button class="dt-page-btn dt-prev" data-p="prev" ${currentPage === 1 ? 'disabled' : ''}>
+        <div class="dt-pages flex items-center gap-[3px]">
+          <button class="${btnBase} ${btnNav}" data-p="prev" ${currentPage === 1 ? 'disabled' : ''}>
             <span class="material-icons-round" style="font-size:16px">chevron_left</span>
           </button>
           ${btns.join('')}
-          <button class="dt-page-btn dt-next" data-p="next" ${currentPage === totalPages ? 'disabled' : ''}>
+          <button class="${btnBase} ${btnNav}" data-p="next" ${currentPage === totalPages ? 'disabled' : ''}>
             <span class="material-icons-round" style="font-size:16px">chevron_right</span>
           </button>
         </div>`;

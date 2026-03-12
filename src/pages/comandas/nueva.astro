@@ -693,8 +693,18 @@ const productos = (await store.getProductos())
   }
 </style>
 
+<!-- define:vars es inline (no módulo) — solo expone datos al window -->
 <script define:vars={{ productos, pendientes }}>
+  window.__CMD_PRODUCTOS  = productos;
+  window.__CMD_PENDIENTES = pendientes;
+</script>
+
+<!-- Módulo ES: puede importar GSAP y usar los datos del window -->
+<script>
   import { gsap } from 'gsap';
+
+  const productos  = window.__CMD_PRODUCTOS  ?? [];
+  const pendientes = window.__CMD_PENDIENTES ?? [];
 
   // ── Constantes ─────────────────────────────────────────────────
   const PER_PAGE = 15;

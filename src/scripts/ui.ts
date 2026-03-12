@@ -148,35 +148,35 @@ function initDataTables() {
     // ── Toolbar (search bar) — styled with Tailwind v4 ───────────────────────
     const toolbar = document.createElement('div');
     toolbar.className = [
-      'flex items-center justify-between gap-3 flex-wrap',
-      'px-5 py-3',
+      'flex items-center justify-between gap-4 flex-wrap',
+      'px-6 py-4',
       'border-b border-border bg-card',
     ].join(' ');
     toolbar.innerHTML = `
-      <span class="dt-info text-[0.82rem] text-muted font-medium"></span>
-      <div class="dt-search-box flex items-center gap-1.5
+      <span class="dt-info text-sm text-muted font-medium"></span>
+      <div class="dt-search-box flex items-center gap-2
                   border border-border rounded-[var(--radius)]
-                  px-2.5 py-[6px] bg-card min-w-60
+                  px-3 py-2 bg-card min-w-64
                   transition-all duration-200
                   focus-within:border-primary focus-within:ring-[3px] focus-within:ring-primary-light">
         <span class="material-icons-round text-muted pointer-events-none select-none"
-              style="font-size:17px">search</span>
+              style="font-size:18px">search</span>
         <input type="text"
                class="dt-search flex-1 min-w-0 border-0 outline-none bg-transparent
                       text-sm text-[var(--text)] font-[inherit]
                       placeholder:text-muted"
                placeholder="Buscar…" autocomplete="off" />
-        <button class="dt-clear flex items-center bg-transparent border-0 p-0.5 rounded
+        <button class="dt-clear flex items-center bg-transparent border-0 p-1 rounded
                        text-muted transition-colors hover:text-danger hover:bg-red-50"
                 title="Limpiar búsqueda" style="display:none">
-          <span class="material-icons-round" style="font-size:15px">close</span>
+          <span class="material-icons-round" style="font-size:16px">close</span>
         </button>
       </div>`;
     table.parentElement!.insertBefore(toolbar, table);
 
     // ── Footer (pagination) — styled with Tailwind v4 ────────────────────────
     const footer = document.createElement('div');
-    footer.className = 'dt-footer flex items-center justify-end px-5 py-2.5 border-t border-border bg-card';
+    footer.className = 'dt-footer flex items-center justify-end px-6 py-3.5 border-t border-border bg-card';
     table.after(footer);
 
     const infoEl   = toolbar.querySelector<HTMLElement>('.dt-info')!;
@@ -206,9 +206,9 @@ function initDataTables() {
       // Shared Tailwind classes for page buttons — Tailwind v4 scans these strings
       const btnBase = [
         'dt-page-btn',
-        'min-w-8 h-8 px-2',
+        'min-w-9 h-9 px-3',
         'border rounded-[var(--radius)]',
-        'text-[0.82rem] font-medium font-[inherit]',
+        'text-sm font-medium font-[inherit]',
         'inline-flex items-center justify-center',
         'transition-all duration-150 leading-none cursor-pointer',
         'disabled:opacity-40 disabled:cursor-not-allowed',
@@ -219,17 +219,17 @@ function initDataTables() {
 
       const btns = pageRange(currentPage, totalPages).map(p =>
         p === '…'
-          ? `<span class="min-w-6 text-center text-muted text-[0.82rem] select-none">…</span>`
+          ? `<span class="min-w-8 text-center text-muted text-sm select-none">…</span>`
           : `<button class="${btnBase} ${p === currentPage ? btnActive : btnDefault}" data-p="${p}">${p}</button>`
       );
       footer.innerHTML = `
-        <div class="dt-pages flex items-center gap-[3px]">
+        <div class="dt-pages flex items-center gap-1">
           <button class="${btnBase} ${btnNav}" data-p="prev" ${currentPage === 1 ? 'disabled' : ''}>
-            <span class="material-icons-round" style="font-size:16px">chevron_left</span>
+            <span class="material-icons-round" style="font-size:18px">chevron_left</span>
           </button>
           ${btns.join('')}
           <button class="${btnBase} ${btnNav}" data-p="next" ${currentPage === totalPages ? 'disabled' : ''}>
-            <span class="material-icons-round" style="font-size:16px">chevron_right</span>
+            <span class="material-icons-round" style="font-size:18px">chevron_right</span>
           </button>
         </div>`;
 

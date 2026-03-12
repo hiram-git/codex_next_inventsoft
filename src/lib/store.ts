@@ -25,6 +25,8 @@ export type Marca = typeof schema.marcas.$inferSelect;
 export type Linea = typeof schema.lineas.$inferSelect;
 export type TipoCliente = typeof schema.tiposCliente.$inferSelect;
 export type Vendedor = typeof schema.vendedores.$inferSelect;
+export type ComponenteProducto = typeof schema.componentesProducto.$inferSelect;
+export type Comanda = typeof schema.comandas.$inferSelect;
 
 // Helper: numeric columns come back as strings from pg, convert to number
 function num(v: string | number | null): number {
@@ -155,6 +157,25 @@ function normalizePedido(row: Pedido) {
 
 function normalizeId<T extends { id: number }>(row: T) {
   return { ...row, id: String(row.id) };
+}
+
+function normalizeComponente(row: ComponenteProducto) {
+  return {
+    ...row,
+    id: String(row.id),
+    productoId: String(row.productoId),
+    componenteId: String(row.componenteId),
+    cantidad: num(row.cantidad),
+  };
+}
+
+function normalizeComanda(row: Comanda) {
+  return {
+    ...row,
+    id: String(row.id),
+    pedidoId: row.pedidoId ? String(row.pedidoId) : null,
+    items: (row.items ?? []).map(i => ({ ...i, cantidad: num(i.cantidad) })),
+  };
 }
 
 export const store = {
@@ -398,10 +419,11 @@ export const store = {
     }).returning();
     const factura = normalizeFactura(rows[0]);
 
-    // If almacenId provided, create inventory exits only for tipo='producto' items
+    // If almacenId provided, create inventory exits (expandir compuestos/kits)
     if (data.almacenId && data.almacenNombre) {
-      for (const item of data.items) {
-        if ((item.tipo ?? 'producto') !== 'producto') continue;
+      const productoItems = data.items.filter(i => (i.tipo ?? 'producto') === 'producto');
+      const inventarioItems = await this._expandirItemsInventario(productoItems);
+      for (const item of inventarioItems) {
         const existing = await this.getInventarioItem(data.almacenId, item.productoId);
         const stockAnterior = existing?.stock ?? 0;
         const stockNuevo = Math.max(0, stockAnterior - item.cantidad);
@@ -412,13 +434,15 @@ export const store = {
           productoId: item.productoId,
           productoNombre: item.productoNombre,
           tipo: 'salida',
-          cantidad: item.cantidad,
+          cantidad: Math.ceil(item.cantidad),
           stockAnterior,
           stockNuevo,
           referencia: 'factura',
           referenciaId: Number(factura.id),
           referenciaNumero: factura.numero,
-          notas: `Salida por factura ${factura.numero}`,
+          notas: item.origenNombre
+            ? `Componente de "${item.origenNombre}" — Factura ${factura.numero}`
+            : `Salida por factura ${factura.numero}`,
           fecha: data.fecha,
         });
       }
@@ -763,17 +787,20 @@ export const store = {
 
     const fecha = new Date().toISOString().split('T')[0];
 
-    // Validate stock disponible for all items before making any changes
-    for (const item of pedido.items) {
+    // Expandir items compuestos/kit → sus componentes para validar y reservar stock
+    const inventarioItems = await this._expandirItemsInventario(pedido.items);
+
+    // Validate stock disponible for all (expanded) items before making any changes
+    for (const item of inventarioItems) {
       const inv = await this.getInventarioItem(pedido.almacenId, item.productoId);
       const disponible = (inv?.stock ?? 0) - (inv?.stockReservado ?? 0);
       if (disponible < item.cantidad) {
-        return { ok: false, error: `Stock insuficiente para "${item.productoNombre}". Disponible: ${disponible}, requerido: ${item.cantidad}.` };
+        return { ok: false, error: `Stock insuficiente para "${item.productoNombre}"${item.origenNombre ? ` (componente de "${item.origenNombre}")` : ''}. Disponible: ${disponible}, requerido: ${Math.ceil(item.cantidad)}.` };
       }
     }
 
-    // Reserve inventory
-    for (const item of pedido.items) {
+    // Reserve inventory (sobre componentes expandidos)
+    for (const item of inventarioItems) {
       const inv = await this.getInventarioItem(pedido.almacenId, item.productoId);
       const stockDisponibleAnterior = (inv?.stock ?? 0) - (inv?.stockReservado ?? 0);
       const stockDisponibleNuevo = stockDisponibleAnterior - item.cantidad;
@@ -785,13 +812,15 @@ export const store = {
         productoId: item.productoId,
         productoNombre: item.productoNombre,
         tipo: 'reserva',
-        cantidad: item.cantidad,
+        cantidad: Math.ceil(item.cantidad),
         stockAnterior: stockDisponibleAnterior,
         stockNuevo: stockDisponibleNuevo,
         referencia: 'pedido',
         referenciaId: Number(pedido.id),
         referenciaNumero: pedido.numero,
-        notas: `Reserva por pedido ${pedido.numero}`,
+        notas: item.origenNombre
+          ? `Reserva componente de "${item.origenNombre}" por pedido ${pedido.numero}`
+          : `Reserva por pedido ${pedido.numero}`,
         fecha,
       });
     }
@@ -806,9 +835,10 @@ export const store = {
 
     const fecha = new Date().toISOString().split('T')[0];
 
-    // If confirmed, release reservations
+    // If confirmed, release reservations (sobre componentes expandidos)
     if (pedido.estado === 'confirmado') {
-      for (const item of pedido.items) {
+      const inventarioItems = await this._expandirItemsInventario(pedido.items);
+      for (const item of inventarioItems) {
         const inv = await this.getInventarioItem(pedido.almacenId, item.productoId);
         const stockDisponibleAnterior = (inv?.stock ?? 0) - (inv?.stockReservado ?? 0);
         const stockDisponibleNuevo = stockDisponibleAnterior + item.cantidad;
@@ -820,13 +850,15 @@ export const store = {
           productoId: item.productoId,
           productoNombre: item.productoNombre,
           tipo: 'liberacion',
-          cantidad: item.cantidad,
+          cantidad: Math.ceil(item.cantidad),
           stockAnterior: stockDisponibleAnterior,
           stockNuevo: stockDisponibleNuevo,
           referencia: 'pedido',
           referenciaId: Number(pedido.id),
           referenciaNumero: pedido.numero,
-          notas: `Liberación por cancelación de pedido ${pedido.numero}`,
+          notas: item.origenNombre
+            ? `Liberación componente de "${item.origenNombre}" por cancelación de pedido ${pedido.numero}`
+            : `Liberación por cancelación de pedido ${pedido.numero}`,
           fecha,
         });
       }
@@ -1087,7 +1119,9 @@ export const store = {
     const fecha = new Date().toISOString().split('T')[0];
 
     // Create actual stock exits (salidas) and release reservations
-    for (const item of pedido.items) {
+    // Para productos compuestos/kit se descuenta de sus componentes
+    const inventarioItems = await this._expandirItemsInventario(pedido.items);
+    for (const item of inventarioItems) {
       const inv = await this.getInventarioItem(pedido.almacenId, item.productoId);
       const stockAnterior = inv?.stock ?? 0;
       const stockNuevo = Math.max(0, stockAnterior - item.cantidad);
@@ -1100,13 +1134,15 @@ export const store = {
         productoId: item.productoId,
         productoNombre: item.productoNombre,
         tipo: 'salida',
-        cantidad: item.cantidad,
+        cantidad: Math.ceil(item.cantidad),
         stockAnterior,
         stockNuevo,
         referencia: 'pedido',
         referenciaId: Number(pedido.id),
         referenciaNumero: pedido.numero,
-        notas: `Despacho de pedido ${pedido.numero}`,
+        notas: item.origenNombre
+          ? `Componente de "${item.origenNombre}" — Despacho de pedido ${pedido.numero}`
+          : `Despacho de pedido ${pedido.numero}`,
         fecha,
       });
     }
@@ -1267,6 +1303,145 @@ export const store = {
       topProductos,
       porMetodo: Object.fromEntries(porMetodo),
     };
+  },
+
+  // ── Inventario Compuesto: helper que expande items a sus componentes ──────
+  // Para compuesto/kit: reemplaza el item por sus componentes × cantidad vendida
+  // Para simple: devuelve el item sin cambios
+  async _expandirItemsInventario(
+    items: { productoId: string; productoNombre: string; cantidad: number }[]
+  ): Promise<{ productoId: string; productoNombre: string; cantidad: number; origenNombre: string | null }[]> {
+    const resultado: { productoId: string; productoNombre: string; cantidad: number; origenNombre: string | null }[] = [];
+    for (const item of items) {
+      const producto = await this.getProducto(item.productoId);
+      if (producto && (producto.tipoProducto === 'compuesto' || producto.tipoProducto === 'kit')) {
+        const componentes = await this.getComponentesProducto(item.productoId);
+        for (const comp of componentes) {
+          resultado.push({
+            productoId: comp.componenteId,
+            productoNombre: comp.componenteNombre,
+            cantidad: comp.cantidad * item.cantidad,
+            origenNombre: item.productoNombre,
+          });
+        }
+      } else {
+        resultado.push({ ...item, origenNombre: null });
+      }
+    }
+    return resultado;
+  },
+
+  // ── Componentes de Producto ───────────────────────────────────────────────
+  async getComponentesProducto(productoId: string) {
+    const rows = await db.select().from(schema.componentesProducto)
+      .where(eq(schema.componentesProducto.productoId, Number(productoId)));
+    return rows.map(normalizeComponente);
+  },
+
+  async setComponentesProducto(
+    productoId: string,
+    componentes: { componenteId: string; componenteNombre: string; cantidad: number; unidad?: string }[]
+  ) {
+    // Reemplazar todos los componentes del producto
+    await db.delete(schema.componentesProducto)
+      .where(eq(schema.componentesProducto.productoId, Number(productoId)));
+    if (componentes.length === 0) return [];
+    const rows = await db.insert(schema.componentesProducto).values(
+      componentes.map(c => ({
+        productoId: Number(productoId),
+        componenteId: Number(c.componenteId),
+        componenteNombre: c.componenteNombre,
+        cantidad: String(c.cantidad),
+        unidad: c.unidad ?? '',
+      }))
+    ).returning();
+    return rows.map(normalizeComponente);
+  },
+
+  async deleteComponentesProducto(productoId: string) {
+    await db.delete(schema.componentesProducto)
+      .where(eq(schema.componentesProducto.productoId, Number(productoId)));
+  },
+
+  // ── Comandas (órdenes de cocina) ──────────────────────────────────────────
+  async getComandasActivas() {
+    const rows = await db.select().from(schema.comandas)
+      .where(sql`${schema.comandas.estado} NOT IN ('entregada', 'cancelada')`)
+      .orderBy(schema.comandas.creadoAt);
+    return rows.map(normalizeComanda);
+  },
+
+  async getComandasAll() {
+    const rows = await db.select().from(schema.comandas)
+      .orderBy(desc(schema.comandas.id));
+    return rows.map(normalizeComanda);
+  },
+
+  async getComanda(id: string) {
+    const rows = await db.select().from(schema.comandas).where(eq(schema.comandas.id, Number(id)));
+    return rows[0] ? normalizeComanda(rows[0]) : undefined;
+  },
+
+  async crearComanda(data: {
+    pedidoId?: string;
+    pedidoNumero?: string;
+    mesa?: string;
+    clienteNombre?: string;
+    items: { productoId: string; productoNombre: string; cantidad: number; notas?: string }[];
+    prioridad?: string;
+    notas?: string;
+  }) {
+    const countResult = await db.select({ count: sql<number>`count(*)` }).from(schema.comandas);
+    const count = Number(countResult[0].count);
+    const numero = `CMD-${String(count + 1).padStart(4, '0')}`;
+    const fecha = new Date().toISOString().split('T')[0];
+
+    const rows = await db.insert(schema.comandas).values({
+      numero,
+      pedidoId: data.pedidoId ? Number(data.pedidoId) : null,
+      pedidoNumero: data.pedidoNumero ?? '',
+      mesa: data.mesa ?? '',
+      clienteNombre: data.clienteNombre ?? '',
+      items: data.items.map(i => ({ ...i, notas: i.notas ?? '' })),
+      estado: 'nueva',
+      prioridad: data.prioridad ?? 'normal',
+      notas: data.notas ?? '',
+      fecha,
+    }).returning();
+    return normalizeComanda(rows[0]);
+  },
+
+  async crearComandaDesdePedido(pedidoId: string) {
+    const pedido = await this.getPedido(pedidoId);
+    if (!pedido) return null;
+    return this.crearComanda({
+      pedidoId,
+      pedidoNumero: pedido.numero,
+      clienteNombre: pedido.clienteNombre,
+      items: pedido.items.map(i => ({
+        productoId: i.productoId,
+        productoNombre: i.productoNombre,
+        cantidad: i.cantidad,
+        notas: '',
+      })),
+    });
+  },
+
+  async actualizarEstadoComanda(id: string, estado: string) {
+    const ahora = new Date();
+    const update: Record<string, unknown> = { estado };
+    if (estado === 'en_preparacion') update.iniciadoAt = ahora;
+    if (estado === 'lista')          update.listoAt    = ahora;
+    if (estado === 'entregada')      update.entregadoAt = ahora;
+
+    const rows = await db.update(schema.comandas).set(update).where(eq(schema.comandas.id, Number(id))).returning();
+    return rows[0] ? normalizeComanda(rows[0]) : null;
+  },
+
+  async cancelarComanda(id: string) {
+    const rows = await db.update(schema.comandas).set({ estado: 'cancelada' })
+      .where(eq(schema.comandas.id, Number(id))).returning();
+    return rows[0] ? normalizeComanda(rows[0]) : null;
   },
 
   // Last N months summary for chart/comparison

@@ -1,0 +1,386 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { store } from '../../../lib/store';
+
+const { id } = Astro.params;
+const producto = await store.getProducto(id!);
+if (!producto) return Astro.redirect('/productos');
+
+let error   = '';
+let success = '';
+
+if (Astro.request.method === 'POST') {
+  const fd = await Astro.request.formData();
+  const accion = fd.get('accion')?.toString() ?? '';
+
+  if (accion === 'set_tipo') {
+    // Actualizar tipoProducto del producto
+    const tipoProducto = fd.get('tipoProducto')?.toString() ?? 'simple';
+    await store.updateProducto(id!, { tipoProducto });
+    if (tipoProducto === 'simple') {
+      await store.deleteComponentesProducto(id!);
+    }
+    return Astro.redirect(`/productos/${id}/componentes`);
+  }
+
+  if (accion === 'save_componentes') {
+    const componenteIds    = fd.getAll('componenteId[]');
+    const componenteNombres = fd.getAll('componenteNombre[]');
+    const cantidades        = fd.getAll('cantidad[]');
+    const unidades          = fd.getAll('unidad[]');
+
+    const componentes = componenteIds
+      .map((cid, idx) => ({
+        componenteId:    String(cid),
+        componenteNombre: String(componenteNombres[idx] ?? ''),
+        cantidad:        parseFloat(String(cantidades[idx] ?? '1')) || 1,
+        unidad:          String(unidades[idx] ?? ''),
+      }))
+      .filter(c => c.componenteId && c.componenteNombre);
+
+    if (componentes.length === 0) {
+      error = 'Debe agregar al menos un componente.';
+    } else {
+      try {
+        await store.setComponentesProducto(id!, componentes);
+        success = 'Componentes guardados correctamente.';
+      } catch {
+        error = 'Error al guardar los componentes.';
+      }
+    }
+  }
+}
+
+// Datos actualizados después del POST
+const productoActualizado = await store.getProducto(id!);
+const componentes         = await store.getComponentesProducto(id!);
+const todosProductos      = (await store.getProductos())
+  .filter(p => String(p.id) !== String(id)); // excluir el producto padre
+---
+
+<AdminLayout title={`Componentes — ${productoActualizado!.nombre}`}>
+  <div class="page-header">
+    <div>
+      <h1>Inventario Compuesto</h1>
+      <p style="color:var(--text-muted);font-size:0.9rem">{productoActualizado!.nombre}</p>
+    </div>
+    <div style="display:flex;gap:10px">
+      <a href={`/productos/${id}/editar`} class="btn btn-secondary">
+        <span class="material-icons-round" style="font-size:18px">edit</span>
+        Editar producto
+      </a>
+      <a href="/productos" class="btn btn-secondary">
+        <span class="material-icons-round" style="font-size:18px">arrow_back</span>
+        Productos
+      </a>
+    </div>
+  </div>
+
+  {error   && <div class="alert alert-error"   style="margin-bottom:16px">{error}</div>}
+  {success && <div class="alert alert-success" style="margin-bottom:16px">{success}</div>}
+
+  <!-- ── Tipo de producto ─────────────────────────────────────── -->
+  <div class="card" style="margin-bottom:20px;max-width:680px">
+    <h3 style="margin:0 0 4px;font-size:1rem">Tipo de producto</h3>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin:0 0 16px">
+      Define cómo se gestiona el stock al vender o despachar este producto.
+    </p>
+
+    <div class="tipo-grid">
+      <label class:list={['tipo-card', { active: productoActualizado!.tipoProducto === 'simple' }]}>
+        <form method="POST">
+          <input type="hidden" name="accion" value="set_tipo" />
+          <input type="hidden" name="tipoProducto" value="simple" />
+          <button type="submit" class="tipo-btn">
+            <span class="material-icons-round tipo-icon">inventory_2</span>
+            <span class="tipo-label">Simple</span>
+            <span class="tipo-desc">Stock propio — se descuenta directamente este producto del almacén.</span>
+          </button>
+        </form>
+      </label>
+
+      <label class:list={['tipo-card', { active: productoActualizado!.tipoProducto === 'compuesto' }]}>
+        <form method="POST">
+          <input type="hidden" name="accion" value="set_tipo" />
+          <input type="hidden" name="tipoProducto" value="compuesto" />
+          <button type="submit" class="tipo-btn">
+            <span class="material-icons-round tipo-icon">blender</span>
+            <span class="tipo-label">Compuesto</span>
+            <span class="tipo-desc">Armado desde ingredientes — al vender se descuentan los componentes (ej: hamburguesa).</span>
+          </button>
+        </form>
+      </label>
+
+      <label class:list={['tipo-card', { active: productoActualizado!.tipoProducto === 'kit' }]}>
+        <form method="POST">
+          <input type="hidden" name="accion" value="set_tipo" />
+          <input type="hidden" name="tipoProducto" value="kit" />
+          <button type="submit" class="tipo-btn">
+            <span class="material-icons-round tipo-icon">redeem</span>
+            <span class="tipo-label">Kit / Bundle</span>
+            <span class="tipo-desc">Precio combo personalizado — los componentes tienen stock propio pero se venden juntos (ej: Kit Coca + Fanta = $15).</span>
+          </button>
+        </form>
+      </label>
+    </div>
+  </div>
+
+  <!-- ── Componentes (solo si no es simple) ───────────────────── -->
+  {productoActualizado!.tipoProducto !== 'simple' && (
+    <div class="card" style="max-width:760px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <h3 style="margin:0 0 2px;font-size:1rem">
+            {productoActualizado!.tipoProducto === 'kit' ? 'Ítems del kit' : 'Ingredientes / Componentes'}
+          </h3>
+          <p style="color:var(--text-muted);font-size:0.82rem;margin:0">
+            {productoActualizado!.tipoProducto === 'kit'
+              ? 'Al despachar/facturar este kit se descontará 1 unidad de cada componente.'
+              : 'Al despachar/facturar este producto se descontarán las cantidades indicadas de cada ingrediente.'}
+          </p>
+        </div>
+        <button type="button" id="addCompBtn" class="btn btn-secondary btn-sm">
+          <span class="material-icons-round" style="font-size:16px">add</span>
+          Agregar
+        </button>
+      </div>
+
+      {componentes.length > 0 && (
+        <div class="info-banner">
+          <span class="material-icons-round" style="font-size:16px;color:var(--primary)">info</span>
+          <span>
+            {productoActualizado!.tipoProducto === 'kit'
+              ? `Precio del kit: $${productoActualizado!.precio.toFixed(2)} · Suma de componentes: $${todosProductos
+                  .filter(p => componentes.some(c => String(c.componenteId) === String(p.id)))
+                  .reduce((s, p) => s + p.precio * (componentes.find(c => String(c.componenteId) === String(p.id))?.cantidad ?? 1), 0)
+                  .toFixed(2)}`
+              : `${componentes.length} componente${componentes.length !== 1 ? 's' : ''} configurados`}
+          </span>
+        </div>
+      )}
+
+      <form method="POST" id="compForm">
+        <input type="hidden" name="accion" value="save_componentes" />
+
+        <div class="comp-table-wrap">
+          <table class="comp-table">
+            <thead>
+              <tr>
+                <th>Componente / Producto</th>
+                <th style="width:100px">Cantidad</th>
+                <th style="width:90px">Unidad</th>
+                <th style="width:44px"></th>
+              </tr>
+            </thead>
+            <tbody id="compBody">
+              {componentes.map(c => (
+                <tr>
+                  <td>
+                    <select name="componenteId[]" class="form-control comp-select">
+                      <option value="">— Seleccionar —</option>
+                      {todosProductos.map(p => (
+                        <option value={p.id} data-nombre={p.nombre} selected={String(p.id) === String(c.componenteId)}>
+                          {p.nombre}
+                        </option>
+                      ))}
+                    </select>
+                    <input type="hidden" name="componenteNombre[]" class="comp-nombre" value={c.componenteNombre} />
+                  </td>
+                  <td>
+                    <input type="number" name="cantidad[]" class="form-control" value={c.cantidad} min="0.001" step="0.001" style="width:90px" />
+                  </td>
+                  <td>
+                    <input type="text" name="unidad[]" class="form-control" value={c.unidad ?? ''} placeholder="kg, g, ml…" style="width:80px" />
+                  </td>
+                  <td>
+                    <button type="button" class="btn-rm-comp">
+                      <span class="material-icons-round" style="font-size:16px">delete</span>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <p id="compEmpty" style={`color:var(--text-muted);font-size:0.85rem;margin:8px 0;display:${componentes.length === 0 ? 'block' : 'none'}`}>
+          Sin componentes. Haz clic en "Agregar".
+        </p>
+
+        <div style="display:flex;justify-content:flex-end;margin-top:16px">
+          <button type="submit" class="btn btn-primary" id="saveCompBtn">
+            <span class="material-icons-round" style="font-size:18px">save</span>
+            Guardar componentes
+          </button>
+        </div>
+      </form>
+    </div>
+  )}
+</AdminLayout>
+
+<style>
+  .tipo-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  @media (max-width: 700px) {
+    .tipo-grid { grid-template-columns: 1fr; }
+  }
+
+  .tipo-card {
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+
+  .tipo-card.active {
+    border-color: var(--primary);
+    background: var(--primary-light);
+  }
+
+  .tipo-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 14px;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .tipo-icon {
+    font-size: 24px !important;
+    color: var(--primary);
+    margin-bottom: 4px;
+  }
+
+  .tipo-label {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--text);
+  }
+
+  .tipo-desc {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  .info-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--primary-light);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    color: var(--primary);
+    margin-bottom: 14px;
+  }
+
+  .comp-table-wrap {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .comp-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+
+  .comp-table th {
+    background: var(--bg);
+    padding: 8px 12px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .comp-table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+
+  .comp-table tr:last-child td { border-bottom: none; }
+  .comp-table .form-control { font-size: 0.875rem; padding: 5px 8px; }
+
+  .btn-rm-comp {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--danger);
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+  }
+  .btn-rm-comp:hover { background: #fee2e2; }
+</style>
+
+<script define:vars={{ todosProductos }}>
+  const compBody  = document.getElementById('compBody');
+  const compEmpty = document.getElementById('compEmpty');
+  let rowIdx = 0;
+
+  function syncEmpty() {
+    compEmpty.style.display = compBody.rows.length === 0 ? 'block' : 'none';
+  }
+
+  function attachSelectSync(row) {
+    row.querySelector('.comp-select').addEventListener('change', function() {
+      const opt = this.options[this.selectedIndex];
+      row.querySelector('.comp-nombre').value = opt.dataset.nombre ?? '';
+    });
+    row.querySelector('.btn-rm-comp').addEventListener('click', () => {
+      row.remove();
+      syncEmpty();
+    });
+  }
+
+  // Vincular las filas ya renderadas (de componentes existentes)
+  compBody.querySelectorAll('tr').forEach(tr => attachSelectSync(tr));
+
+  document.getElementById('addCompBtn')?.addEventListener('click', () => {
+    const opts = todosProductos.map(p =>
+      `<option value="${p.id}" data-nombre="${p.nombre.replace(/"/g, '&quot;')}">${p.nombre}</option>`
+    ).join('');
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>
+        <select name="componenteId[]" class="form-control comp-select">
+          <option value="">— Seleccionar —</option>
+          ${opts}
+        </select>
+        <input type="hidden" name="componenteNombre[]" class="comp-nombre" value="">
+      </td>
+      <td>
+        <input type="number" name="cantidad[]" class="form-control" value="1" min="0.001" step="0.001" style="width:90px">
+      </td>
+      <td>
+        <input type="text" name="unidad[]" class="form-control" placeholder="kg, g, ml…" style="width:80px">
+      </td>
+      <td>
+        <button type="button" class="btn-rm-comp">
+          <span class="material-icons-round" style="font-size:16px">delete</span>
+        </button>
+      </td>
+    `;
+    attachSelectSync(tr);
+    compBody.appendChild(tr);
+    syncEmpty();
+    rowIdx++;
+  });
+</script>

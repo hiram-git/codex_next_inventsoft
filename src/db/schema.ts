@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, text, boolean, numeric, integer, date, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, text, boolean, numeric, integer, date, jsonb, timestamp } from 'drizzle-orm/pg-core';
 
 // --- Permisos ---
 export const permisos = pgTable('permisos', {
@@ -137,6 +137,8 @@ export const productos = pgTable('productos', {
   stock:              integer('stock').default(0).notNull(),
   minimoInventario:   numeric('minimo_inventario', { precision: 12, scale: 2 }).default('0'),
   maximoInventario:   numeric('maximo_inventario', { precision: 12, scale: 2 }).default('0'),
+  // Tipo: 'simple' = stock propio | 'compuesto' = armado desde ingredientes | 'kit' = bundle con precio custom
+  tipoProducto: varchar('tipo_producto', { length: 20 }).default('simple').notNull(),
   activo: boolean('activo').default(true).notNull(),
 });
 
@@ -364,4 +366,41 @@ export const cotizaciones = pgTable('cotizaciones', {
   fecha: date('fecha').defaultNow().notNull(),
   facturaId: integer('factura_id'),
   facturaNumero: varchar('factura_numero', { length: 20 }).default(''),
+});
+
+// --- Componentes de Producto (recetas y kits) ---
+// productoId → el producto compuesto o kit
+// componenteId → ingrediente / ítem individual que se descuenta del inventario
+export const componentesProducto = pgTable('componentes_producto', {
+  id: serial('id').primaryKey(),
+  productoId: integer('producto_id').notNull(),
+  componenteId: integer('componente_id').notNull(),
+  componenteNombre: varchar('componente_nombre', { length: 300 }).notNull(),
+  cantidad: numeric('cantidad', { precision: 12, scale: 4 }).notNull(),
+  unidad: varchar('unidad', { length: 50 }).default(''),
+});
+
+// --- Comandas (órdenes de cocina) ---
+export const comandas = pgTable('comandas', {
+  id: serial('id').primaryKey(),
+  numero: varchar('numero', { length: 20 }).notNull().unique(),
+  pedidoId: integer('pedido_id'),
+  pedidoNumero: varchar('pedido_numero', { length: 20 }).default(''),
+  mesa: varchar('mesa', { length: 50 }).default(''),
+  clienteNombre: varchar('cliente_nombre', { length: 300 }).default(''),
+  items: jsonb('items').$type<{
+    productoId: string;
+    productoNombre: string;
+    cantidad: number;
+    notas: string;
+  }[]>().default([]),
+  estado: varchar('estado', { length: 20 }).notNull().default('nueva'), // nueva | en_preparacion | lista | entregada | cancelada
+  prioridad: varchar('prioridad', { length: 20 }).default('normal'),    // baja | normal | alta | urgente
+  notas: text('notas').default(''),
+  // Timestamps para el temporizador en tiempo real
+  creadoAt: timestamp('creado_at', { withTimezone: true }).defaultNow().notNull(),
+  iniciadoAt: timestamp('iniciado_at', { withTimezone: true }),
+  listoAt: timestamp('listo_at', { withTimezone: true }),
+  entregadoAt: timestamp('entregado_at', { withTimezone: true }),
+  fecha: date('fecha').defaultNow().notNull(),
 });

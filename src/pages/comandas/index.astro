@@ -1,0 +1,425 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { store } from '../../lib/store';
+
+const comandas = await store.getComandasActivas();
+
+// Agrupar por estado para la vista kanban
+const estados = [
+  { key: 'nueva',          label: 'Nuevas',        color: '#2563eb', bg: '#dbeafe', icon: 'fiber_new' },
+  { key: 'en_preparacion', label: 'En preparación', color: '#d97706', bg: '#fef3c7', icon: 'restaurant' },
+  { key: 'lista',          label: 'Listas',         color: '#16a34a', bg: '#dcfce7', icon: 'check_circle' },
+];
+
+const prioridadConfig: Record<string, { label: string; color: string }> = {
+  urgente: { label: 'URGENTE', color: '#dc2626' },
+  alta:    { label: 'Alta',    color: '#f97316' },
+  normal:  { label: 'Normal',  color: '#64748b' },
+  baja:    { label: 'Baja',    color: '#94a3b8' },
+};
+---
+
+<AdminLayout title="Cocina - Comandas">
+  <div class="page-header">
+    <div>
+      <h1>Cocina — Comandas</h1>
+      <p style="color:var(--text-muted);font-size:0.9rem;">Pantalla en tiempo real · actualiza cada 30 s</p>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <span id="reloj" style="font-size:0.85rem;color:var(--text-muted);font-variant-numeric:tabular-nums"></span>
+      <a href="/comandas/nueva" class="btn btn-primary">
+        <span class="material-icons-round" style="font-size:18px">add</span>
+        Nueva comanda
+      </a>
+    </div>
+  </div>
+
+  <!-- Kanban board -->
+  <div class="kanban-board" id="kanbanBoard">
+    {estados.map(est => {
+      const cols = comandas.filter(c => c.estado === est.key);
+      return (
+        <div class="kanban-col">
+          <div class="kanban-col-header" style={`border-left: 4px solid ${est.color}; background:${est.bg}`}>
+            <span class="material-icons-round" style={`color:${est.color};font-size:20px`}>{est.icon}</span>
+            <span style={`color:${est.color};font-weight:700`}>{est.label}</span>
+            <span class="kanban-count" style={`background:${est.color}`}>{cols.length}</span>
+          </div>
+
+          <div class="kanban-items">
+            {cols.length === 0 && (
+              <div class="kanban-empty">Sin comandas</div>
+            )}
+            {cols.map(cmd => {
+              const prio = prioridadConfig[cmd.prioridad ?? 'normal'] ?? prioridadConfig.normal;
+              return (
+                <div
+                  class="comanda-card"
+                  id={`cmd-${cmd.id}`}
+                  data-created-at={cmd.creadoAt instanceof Date ? cmd.creadoAt.toISOString() : String(cmd.creadoAt)}
+                  data-estado={cmd.estado}
+                  data-prioridad={cmd.prioridad}
+                  style={`border-left: 4px solid ${est.color}`}
+                >
+                  <!-- Header de la card -->
+                  <div class="card-head">
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <span class="cmd-numero">{cmd.numero}</span>
+                      {cmd.mesa && <span class="badge-mesa">Mesa {cmd.mesa}</span>}
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px">
+                      {(cmd.prioridad === 'urgente' || cmd.prioridad === 'alta') && (
+                        <span class="badge-prio" style={`background:${prio.color}`}>{prio.label}</span>
+                      )}
+                      <span class="timer-badge" data-timer={`cmd-${cmd.id}`}>--:--</span>
+                    </div>
+                  </div>
+
+                  <!-- Cliente y pedido origen -->
+                  {(cmd.clienteNombre || cmd.pedidoNumero) && (
+                    <div class="card-meta">
+                      {cmd.clienteNombre && <span>{cmd.clienteNombre}</span>}
+                      {cmd.pedidoNumero && <span style="color:var(--text-muted)">Pedido {cmd.pedidoNumero}</span>}
+                    </div>
+                  )}
+
+                  <!-- Items de la comanda -->
+                  <ul class="cmd-items">
+                    {(cmd.items ?? []).map(item => (
+                      <li>
+                        <span class="item-qty">{item.cantidad}×</span>
+                        <span class="item-name">{item.productoNombre}</span>
+                        {item.notas && <span class="item-nota">({item.notas})</span>}
+                      </li>
+                    ))}
+                  </ul>
+
+                  {cmd.notas && (
+                    <div class="cmd-nota-general">
+                      <span class="material-icons-round" style="font-size:14px;color:var(--text-muted)">sticky_note_2</span>
+                      {cmd.notas}
+                    </div>
+                  )}
+
+                  <!-- Acciones de estado -->
+                  <div class="card-actions">
+                    {cmd.estado === 'nueva' && (
+                      <form method="POST" action={`/api/comandas/${cmd.id}/estado`} style="flex:1">
+                        <input type="hidden" name="estado" value="en_preparacion" />
+                        <button type="submit" class="btn-estado btn-iniciar">
+                          <span class="material-icons-round" style="font-size:15px">play_arrow</span>
+                          Iniciar
+                        </button>
+                      </form>
+                    )}
+                    {cmd.estado === 'en_preparacion' && (
+                      <form method="POST" action={`/api/comandas/${cmd.id}/estado`} style="flex:1">
+                        <input type="hidden" name="estado" value="lista" />
+                        <button type="submit" class="btn-estado btn-listo">
+                          <span class="material-icons-round" style="font-size:15px">check</span>
+                          Lista
+                        </button>
+                      </form>
+                    )}
+                    {cmd.estado === 'lista' && (
+                      <form method="POST" action={`/api/comandas/${cmd.id}/estado`} style="flex:1">
+                        <input type="hidden" name="estado" value="entregada" />
+                        <button type="submit" class="btn-estado btn-entregar">
+                          <span class="material-icons-round" style="font-size:15px">delivery_dining</span>
+                          Entregar
+                        </button>
+                      </form>
+                    )}
+                    <form method="POST" action={`/api/comandas/${cmd.id}/estado`}>
+                      <input type="hidden" name="estado" value="cancelada" />
+                      <button type="submit" class="btn-estado btn-cancelar" title="Cancelar">
+                        <span class="material-icons-round" style="font-size:15px">close</span>
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    })}
+  </div>
+</AdminLayout>
+
+<style>
+  .kanban-board {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    align-items: start;
+  }
+
+  @media (max-width: 900px) {
+    .kanban-board { grid-template-columns: 1fr; }
+  }
+
+  .kanban-col {
+    background: var(--bg);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+
+  .kanban-col-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    font-size: 0.9rem;
+  }
+
+  .kanban-count {
+    margin-left: auto;
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 700;
+    min-width: 22px;
+    height: 22px;
+    border-radius: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 6px;
+  }
+
+  .kanban-items {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    min-height: 80px;
+  }
+
+  .kanban-empty {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    padding: 24px 0;
+  }
+
+  /* Comanda card */
+  .comanda-card {
+    background: white;
+    border-radius: 10px;
+    padding: 14px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.07);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: box-shadow 0.2s;
+  }
+
+  .comanda-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+
+  /* Estado de color por tiempo */
+  .comanda-card[data-urgente="true"] { background: #fff5f5; }
+
+  .card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .cmd-numero {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--text);
+  }
+
+  .badge-mesa {
+    background: #e2e8f0;
+    color: var(--text);
+    font-size: 0.75rem;
+    padding: 2px 7px;
+    border-radius: 20px;
+    font-weight: 600;
+  }
+
+  .badge-prio {
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .timer-badge {
+    font-size: 0.8rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    padding: 3px 8px;
+    border-radius: 20px;
+    background: #f1f5f9;
+    color: var(--text-muted);
+    transition: background 0.5s, color 0.5s;
+  }
+
+  .timer-badge.verde  { background: #dcfce7; color: #15803d; }
+  .timer-badge.ambar  { background: #fef9c3; color: #a16207; }
+  .timer-badge.rojo   { background: #fee2e2; color: #b91c1c; }
+  .timer-badge.critico { background: #dc2626; color: white; animation: parpadeo 0.8s infinite; }
+
+  @keyframes parpadeo { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+  .card-meta {
+    display: flex;
+    gap: 10px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    flex-wrap: wrap;
+  }
+
+  .cmd-items {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .cmd-items li {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 0.875rem;
+  }
+
+  .item-qty {
+    font-weight: 700;
+    color: var(--primary);
+    flex-shrink: 0;
+    min-width: 24px;
+  }
+
+  .item-name { color: var(--text); flex: 1; }
+
+  .item-nota {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  .cmd-nota-general {
+    display: flex;
+    align-items: flex-start;
+    gap: 5px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    background: #f8fafc;
+    padding: 6px 8px;
+    border-radius: 6px;
+  }
+
+  .card-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+  }
+
+  .btn-estado {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 100%;
+    padding: 7px 10px;
+    border: none;
+    border-radius: 7px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter 0.15s, transform 0.1s;
+  }
+
+  .btn-estado:hover   { filter: brightness(0.92); }
+  .btn-estado:active  { transform: scale(0.97); }
+
+  .btn-iniciar  { background: #dbeafe; color: #1d4ed8; }
+  .btn-listo    { background: #dcfce7; color: #15803d; }
+  .btn-entregar { background: #f0fdf4; color: #166534; border: 1px solid #86efac; flex: 1; }
+  .btn-cancelar { background: #fee2e2; color: #b91c1c; flex: 0; padding: 7px 10px; width: auto; }
+</style>
+
+<script>
+  import { gsap } from 'gsap';
+
+  // ── Reloj ──────────────────────────────────────────────────────
+  const reloj = document.getElementById('reloj')!;
+  function actualizarReloj() {
+    reloj.textContent = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+  actualizarReloj();
+  setInterval(actualizarReloj, 1000);
+
+  // ── Temporizadores en tiempo real ─────────────────────────────
+  function formatTiempo(ms: number): string {
+    const s = Math.floor(ms / 1000);
+    const m = Math.floor(s / 60);
+    const h = Math.floor(m / 60);
+    if (h > 0) return `${h}h ${String(m % 60).padStart(2, '0')}m`;
+    return `${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+  }
+
+  function claseTimer(ms: number): string {
+    const min = ms / 60000;
+    if (min < 5)  return 'verde';
+    if (min < 10) return 'ambar';
+    if (min < 20) return 'rojo';
+    return 'critico';
+  }
+
+  function actualizarTimers() {
+    const ahora = Date.now();
+    document.querySelectorAll<HTMLElement>('.comanda-card').forEach(card => {
+      const creado = card.dataset.createdAt;
+      const timerId = card.querySelector<HTMLElement>('[data-timer]')?.dataset.timer;
+      if (!creado || !timerId) return;
+
+      const elapsed = ahora - new Date(creado).getTime();
+      const timerEl = document.querySelector<HTMLElement>(`[data-timer="${timerId}"]`);
+      if (!timerEl) return;
+
+      timerEl.textContent = formatTiempo(elapsed);
+      const clase = claseTimer(elapsed);
+      timerEl.className = `timer-badge ${clase}`;
+      card.dataset.urgente = String(clase === 'critico');
+    });
+  }
+
+  actualizarTimers();
+  setInterval(actualizarTimers, 1000);
+
+  // ── Polling: recarga de datos cada 30 s ───────────────────────
+  setInterval(async () => {
+    try {
+      const res = await fetch('/api/comandas/activas');
+      if (!res.ok) return;
+      const data: any[] = await res.json();
+      // Si hay más o menos comandas que lo visible, recargar la página suavemente
+      const actuales = document.querySelectorAll('.comanda-card').length;
+      if (data.length !== actuales) {
+        gsap.to('.kanban-board', {
+          opacity: 0, duration: 0.3,
+          onComplete: () => window.location.reload()
+        });
+      }
+    } catch { /* sin red, ignorar */ }
+  }, 30000);
+
+  // ── Entrance animations ────────────────────────────────────────
+  gsap.from('.comanda-card', {
+    opacity: 0, y: 16, duration: 0.4,
+    stagger: 0.06, ease: 'power2.out',
+    delay: 0.1
+  });
+</script>

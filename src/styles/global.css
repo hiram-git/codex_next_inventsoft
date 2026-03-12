@@ -198,6 +198,8 @@ tbody tr:hover {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   font-size: 0.95rem;
+  background-color: white;
+  color: var(--text);
   transition: border-color 0.2s;
 }
 

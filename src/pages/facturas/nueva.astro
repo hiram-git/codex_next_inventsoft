@@ -59,6 +59,11 @@ const [clientes, almacenes, allProductos, allServicios] = await Promise.all([
 ]);
 const productos = allProductos.filter(p => p.activo);
 const servicios = allServicios.filter(s => s.activo);
+
+const allItems = [
+  ...productos.map(p => ({ tipo: 'producto', id: String(p.id), nombre: p.nombre, precio: p.precio, stock: p.stock ?? 0 })),
+  ...servicios.map(s => ({ tipo: 'servicio', id: String(s.id), nombre: s.nombre, precio: s.precio, stock: 999999 })),
+];
 ---
 
 <AdminLayout title="Nueva Factura">
@@ -70,6 +75,8 @@ const servicios = allServicios.filter(s => s.activo);
   </div>
 
   {error && <div class="alert alert-error">{error}</div>}
+
+  <script is:inline set:html={`window.__facturaItems = ${JSON.stringify(allItems)};`}></script>
 
   <form method="POST" id="facturaForm">
     <input type="hidden" name="items_json" id="itemsJson" value="[]" />
@@ -113,39 +120,19 @@ const servicios = allServicios.filter(s => s.activo);
       <div style="display:grid;grid-template-columns:2fr 1fr auto;gap:8px;margin-bottom:16px;align-items:end">
         <div class="form-group" style="margin-bottom:0">
           <label>Producto / Servicio</label>
-          <select id="selItem" class="form-control">
-            <option value="">Seleccionar...</option>
-            {productos.length > 0 && (
-              <optgroup label="📦 Productos (afectan inventario)">
-                {productos.map(p => (
-                  <option
-                    value={`producto:${p.id}`}
-                    data-tipo="producto"
-                    data-nombre={p.nombre}
-                    data-precio={p.precio}
-                    data-stock={p.stock}
-                  >
-                    {p.nombre} — ${p.precio.toLocaleString('es-MX', { minimumFractionDigits: 2 })} (Stock: {p.stock})
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {servicios.length > 0 && (
-              <optgroup label="🔧 Servicios (no afectan inventario)">
-                {servicios.map(s => (
-                  <option
-                    value={`servicio:${s.id}`}
-                    data-tipo="servicio"
-                    data-nombre={s.nombre}
-                    data-precio={s.precio}
-                    data-stock="999999"
-                  >
-                    {s.nombre} — ${s.precio.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
+          <div style="position:relative">
+            <input
+              type="text"
+              id="searchItem"
+              class="form-control"
+              placeholder="Buscar producto o servicio..."
+              autocomplete="off"
+              oninput="filterItems(this.value)"
+              onfocus="filterItems(this.value)"
+              onblur="hideResults()"
+            />
+            <div id="searchResults" class="search-dropdown" style="display:none"></div>
+          </div>
         </div>
         <div class="form-group" style="margin-bottom:0">
           <label>Cantidad</label>
@@ -206,38 +193,102 @@ const servicios = allServicios.filter(s => s.activo);
   .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 0.95rem; }
   .total-row + .total-row { border-top: 1px solid var(--border); }
   .total-final { font-size: 1.15rem; font-weight: 700; color: var(--primary); }
+  .search-dropdown {
+    position: absolute; top: 100%; left: 0; right: 0; z-index: 200;
+    background: white; border: 1px solid var(--border); border-radius: var(--radius);
+    max-height: 280px; overflow-y: auto; box-shadow: 0 4px 16px rgba(0,0,0,.12);
+    margin-top: 2px;
+  }
+  .search-result-item {
+    padding: 9px 12px; cursor: pointer; border-bottom: 1px solid var(--border);
+    font-size: 0.875rem; display: flex; align-items: center; gap: 8px;
+  }
+  .search-result-item:last-child { border-bottom: none; }
+  .search-result-item:hover { background: #f0f7ff; }
+  .search-result-item .item-name { flex: 1; font-weight: 500; }
+  .search-result-item .item-price { color: var(--text-muted); font-size: 0.8rem; }
+  .search-result-item .item-badge {
+    font-size: 0.7rem; font-weight: 600; padding: 2px 7px; border-radius: 10px;
+  }
+  .badge-producto { background: #dcfce7; color: #16a34a; }
+  .badge-servicio { background: #ede9fe; color: #7c3aed; }
+  .badge-stock { color: var(--text-muted); font-size: 0.75rem; }
 </style>
 
 <script is:inline>
-  let items = [];
+  var __allItems = window.__facturaItems || [];
+  var selectedItem = null;
+  var items = [];
+
+  function fmt(n) { return '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 2 }); }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function filterItems(q) {
+    q = (q || '').toLowerCase().trim();
+    var results = q.length > 0
+      ? __allItems.filter(function(i) { return i.nombre.toLowerCase().includes(q); })
+      : __allItems.slice(0, 30);
+    var el = document.getElementById('searchResults');
+    if (!results.length) { el.style.display = 'none'; return; }
+    el.innerHTML = results.slice(0, 25).map(function(i) {
+      var badge = i.tipo === 'producto'
+        ? '<span class="item-badge badge-producto">Producto</span>'
+        : '<span class="item-badge badge-servicio">Servicio</span>';
+      var stockInfo = i.tipo === 'producto'
+        ? '<span class="badge-stock">Stock: ' + i.stock + '</span>'
+        : '';
+      return '<div class="search-result-item"'
+        + ' data-id="' + escHtml(i.id) + '"'
+        + ' data-tipo="' + escHtml(i.tipo) + '"'
+        + ' data-nombre="' + escHtml(i.nombre) + '"'
+        + ' data-precio="' + i.precio + '"'
+        + ' data-stock="' + i.stock + '"'
+        + ' onmousedown="selectItem(this)">'
+        + badge
+        + '<span class="item-name">' + escHtml(i.nombre) + '</span>'
+        + '<span class="item-price">' + fmt(i.precio) + '</span>'
+        + stockInfo
+        + '</div>';
+    }).join('');
+    el.style.display = 'block';
+  }
+
+  function hideResults() {
+    setTimeout(function() { document.getElementById('searchResults').style.display = 'none'; }, 150);
+  }
+
+  function selectItem(el) {
+    selectedItem = {
+      tipo: el.dataset.tipo,
+      id: el.dataset.id,
+      nombre: el.dataset.nombre,
+      precio: parseFloat(el.dataset.precio),
+      stock: parseInt(el.dataset.stock),
+    };
+    document.getElementById('searchItem').value = el.dataset.nombre;
+    document.getElementById('searchResults').style.display = 'none';
+  }
 
   function addItem() {
-    const sel = document.getElementById('selItem');
-    const cantInput = document.getElementById('cantidad');
-    const opt = sel.options[sel.selectedIndex];
-
-    if (!sel.value) return alert('Seleccione un producto o servicio.');
-
-    const [tipo, itemId] = sel.value.split(':');
-    const productoNombre = opt.dataset.nombre;
-    const precioUnitario = parseFloat(opt.dataset.precio);
-    const stock = parseInt(opt.dataset.stock);
-    const cantidad = parseInt(cantInput.value) || 1;
-
+    if (!selectedItem) return alert('Seleccione un producto o servicio.');
+    var cantInput = document.getElementById('cantidad');
+    var cantidad = parseInt(cantInput.value) || 1;
     if (cantidad <= 0) return alert('La cantidad debe ser mayor a 0.');
-    if (tipo === 'producto' && cantidad > stock) {
-      return alert(`Stock insuficiente. Disponible: ${stock}`);
+    if (selectedItem.tipo === 'producto' && cantidad > selectedItem.stock) {
+      return alert('Stock insuficiente. Disponible: ' + selectedItem.stock);
     }
-
-    const existing = items.find(i => i.tipo === tipo && i.productoId === itemId);
+    var existing = items.find(function(i) { return i.tipo === selectedItem.tipo && i.productoId === selectedItem.id; });
     if (existing) {
       existing.cantidad += cantidad;
       existing.subtotal = existing.cantidad * existing.precioUnitario;
     } else {
-      items.push({ tipo, productoId: itemId, productoNombre, cantidad, precioUnitario, subtotal: cantidad * precioUnitario });
+      items.push({ tipo: selectedItem.tipo, productoId: selectedItem.id, productoNombre: selectedItem.nombre, cantidad: cantidad, precioUnitario: selectedItem.precio, subtotal: cantidad * selectedItem.precio });
     }
-
-    sel.value = '';
+    document.getElementById('searchItem').value = '';
+    selectedItem = null;
     cantInput.value = '1';
     renderItems();
   }
@@ -248,36 +299,28 @@ const servicios = allServicios.filter(s => s.activo);
   }
 
   function renderItems() {
-    const tbody = document.getElementById('itemsBody');
-    const fmt = (n) => '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 2 });
-
+    var tbody = document.getElementById('itemsBody');
     if (items.length === 0) {
       tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">No se han agregado items.</td></tr>';
     } else {
-      tbody.innerHTML = items.map((item, i) => `
-        <tr>
-          <td>${item.productoNombre}</td>
-          <td>
-            ${item.tipo === 'servicio'
-              ? '<span style="background:var(--bg);color:var(--text-muted);padding:2px 8px;border-radius:12px;font-size:0.75rem;font-weight:600">Servicio</span>'
-              : '<span style="background:#dcfce7;color:#16a34a;padding:2px 8px;border-radius:12px;font-size:0.75rem;font-weight:600">Producto</span>'
-            }
-          </td>
-          <td>${fmt(item.precioUnitario)}</td>
-          <td>${item.cantidad}</td>
-          <td><strong>${fmt(item.subtotal)}</strong></td>
-          <td>
-            <button type="button" class="btn btn-danger btn-sm" onclick="removeItem(${i})">
-              <span class="material-icons-round" style="font-size:16px">close</span>
-            </button>
-          </td>
-        </tr>
-      `).join('');
+      tbody.innerHTML = items.map(function(item, i) {
+        return '<tr>'
+          + '<td>' + escHtml(item.productoNombre) + '</td>'
+          + '<td>' + (item.tipo === 'servicio'
+            ? '<span style="background:var(--bg);color:var(--text-muted);padding:2px 8px;border-radius:12px;font-size:0.75rem;font-weight:600">Servicio</span>'
+            : '<span style="background:#dcfce7;color:#16a34a;padding:2px 8px;border-radius:12px;font-size:0.75rem;font-weight:600">Producto</span>') + '</td>'
+          + '<td>' + fmt(item.precioUnitario) + '</td>'
+          + '<td>' + item.cantidad + '</td>'
+          + '<td><strong>' + fmt(item.subtotal) + '</strong></td>'
+          + '<td><button type="button" class="btn btn-danger btn-sm" onclick="removeItem(' + i + ')">'
+          + '<span class="material-icons-round" style="font-size:16px">close</span></button></td>'
+          + '</tr>';
+      }).join('');
     }
 
-    const subtotal = items.reduce((s, i) => s + i.subtotal, 0);
-    const iva = subtotal * 0.16;
-    const total = subtotal + iva;
+    var subtotal = items.reduce(function(s, i) { return s + i.subtotal; }, 0);
+    var iva = subtotal * 0.16;
+    var total = subtotal + iva;
 
     document.getElementById('subtotalDisplay').textContent = fmt(subtotal);
     document.getElementById('ivaDisplay').textContent = fmt(iva);

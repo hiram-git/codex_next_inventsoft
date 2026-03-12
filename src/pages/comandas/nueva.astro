@@ -3,17 +3,15 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 import { store } from '../../lib/store';
 
 let error = '';
-let success = '';
 
 if (Astro.request.method === 'POST') {
   const fd = await Astro.request.formData();
-  const pedidoId   = fd.get('pedidoId')?.toString() ?? '';
-  const mesa       = fd.get('mesa')?.toString() ?? '';
+  const pedidoId      = fd.get('pedidoId')?.toString() ?? '';
+  const mesa          = fd.get('mesa')?.toString() ?? '';
   const clienteNombre = fd.get('clienteNombre')?.toString() ?? '';
-  const prioridad  = fd.get('prioridad')?.toString() ?? 'normal';
-  const notas      = fd.get('notas')?.toString() ?? '';
+  const prioridad     = fd.get('prioridad')?.toString() ?? 'normal';
+  const notas         = fd.get('notas')?.toString() ?? '';
 
-  // Recoger items dinámicos
   const productosIds    = fd.getAll('productoId[]');
   const productosNombres = fd.getAll('productoNombre[]');
   const cantidades      = fd.getAll('cantidad[]');
@@ -21,10 +19,10 @@ if (Astro.request.method === 'POST') {
 
   const items = productosIds
     .map((pid, idx) => ({
-      productoId:    String(pid),
+      productoId:     String(pid),
       productoNombre: String(productosNombres[idx] ?? ''),
-      cantidad:      Number(cantidades[idx] ?? 1),
-      notas:         String(notasItems[idx] ?? ''),
+      cantidad:       Number(cantidades[idx] ?? 1),
+      notas:          String(notasItems[idx] ?? ''),
     }))
     .filter(i => i.productoId && i.productoNombre && i.cantidad > 0);
 
@@ -34,9 +32,7 @@ if (Astro.request.method === 'POST') {
     try {
       await store.crearComanda({
         pedidoId:     pedidoId || undefined,
-        pedidoNumero: pedidoId
-          ? (await store.getPedido(pedidoId))?.numero
-          : undefined,
+        pedidoNumero: pedidoId ? (await store.getPedido(pedidoId))?.numero : undefined,
         mesa,
         clienteNombre,
         items,
@@ -44,230 +40,987 @@ if (Astro.request.method === 'POST') {
         notas,
       });
       return Astro.redirect('/comandas');
-    } catch (e) {
+    } catch {
       error = 'Error al crear la comanda. Intente nuevamente.';
     }
   }
 }
 
-// Pedidos confirmados sin comanda activa (para "crear desde pedido")
-const pedidos   = await store.getPedidos();
+const pedidos    = await store.getPedidos();
 const pendientes = pedidos.filter(p => p.estado === 'confirmado');
-const productos  = await store.getProductos();
+
+// Pasar solo los campos necesarios al cliente para aligerar el JSON
+const productos = (await store.getProductos())
+  .filter(p => p.activo)
+  .map(p => ({
+    id:     String(p.id),
+    nombre: p.nombre,
+    precio: p.precioA?.precio ?? p.precio ?? 0,
+    codigo: p.codigo ?? '',
+    departamento: p.departamento ?? '',
+  }));
 ---
 
 <AdminLayout title="Nueva Comanda">
-  <div class="page-header">
-    <h1>Nueva Comanda</h1>
-    <a href="/comandas" class="btn btn-secondary">
-      <span class="material-icons-round" style="font-size:18px">arrow_back</span>
-      Volver
-    </a>
-  </div>
 
-  {error && <div class="alert alert-error" style="margin-bottom:20px">{error}</div>}
+  {error && (
+    <div class="alert alert-error" id="errorBanner" style="margin-bottom:16px">{error}</div>
+  )}
 
-  <div class="card" style="max-width:760px">
-    <form method="POST" id="cmdForm">
+  <!-- Layout: picker izquierdo + panel derecho -->
+  <div class="nc-layout">
 
-      <!-- Atajo: importar desde pedido -->
-      {pendientes.length > 0 && (
-        <div class="form-group">
-          <label>Importar desde pedido <span style="color:var(--text-muted);font-weight:400">(opcional)</span></label>
-          <select id="selectPedido" class="form-control" style="max-width:360px">
-            <option value="">— Crear comanda manual —</option>
-            {pendientes.map(p => (
-              <option value={p.id} data-cliente={p.clienteNombre} data-items={JSON.stringify(p.items)}>
-                {p.numero} — {p.clienteNombre}
-              </option>
-            ))}
-          </select>
-          <input type="hidden" name="pedidoId" id="pedidoIdInput" value="" />
+    <!-- ════════════════════════ IZQUIERDA ════════════════════════ -->
+    <div class="picker-pane">
+
+      <!-- Cabecera con título y búsqueda -->
+      <div class="picker-header">
+        <div class="picker-title">
+          <a href="/comandas" class="btn-back" title="Volver">
+            <span class="material-icons-round">arrow_back</span>
+          </a>
+          <h1 style="font-size:1.25rem;margin:0">Nueva Comanda</h1>
         </div>
-      )}
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-        <div class="form-group">
-          <label for="clienteNombre">Cliente / Mesa</label>
-          <input id="clienteNombre" name="clienteNombre" type="text" class="form-control" placeholder="Nombre o descripción" />
-        </div>
-        <div class="form-group">
-          <label for="mesa">Mesa / Área</label>
-          <input id="mesa" name="mesa" type="text" class="form-control" placeholder="Ej: Mesa 5, Terraza…" />
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label for="prioridad">Prioridad</label>
-        <select id="prioridad" name="prioridad" class="form-control" style="max-width:240px">
-          <option value="baja">Baja</option>
-          <option value="normal" selected>Normal</option>
-          <option value="alta">Alta</option>
-          <option value="urgente">🚨 Urgente</option>
-        </select>
-      </div>
-
-      <!-- Tabla de ítems -->
-      <div class="form-group">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <label style="margin:0">Ítems de la comanda</label>
-          <button type="button" id="addItemBtn" class="btn btn-secondary btn-sm">
-            <span class="material-icons-round" style="font-size:16px">add</span>
-            Agregar ítem
+        <div class="search-wrap">
+          <span class="material-icons-round search-icon">search</span>
+          <input
+            id="searchInput"
+            type="search"
+            class="search-field"
+            placeholder="Buscar producto…"
+            autocomplete="off"
+          />
+          <button id="clearSearch" class="clear-btn" title="Limpiar" style="display:none">
+            <span class="material-icons-round" style="font-size:16px">close</span>
           </button>
         </div>
+      </div>
 
-        <div class="items-table-wrap">
-          <table class="items-table">
-            <thead>
-              <tr>
-                <th>Producto</th>
-                <th style="width:80px">Cantidad</th>
-                <th>Notas / instrucciones</th>
-                <th style="width:44px"></th>
-              </tr>
-            </thead>
-            <tbody id="itemsBody">
-              <!-- filas dinámicas -->
-            </tbody>
-          </table>
+      <!-- Grid paginada -->
+      <div class="prod-grid" id="prodGrid" aria-live="polite">
+        <!-- renderizado por JS -->
+      </div>
+
+      <!-- Paginación -->
+      <div class="picker-footer">
+        <span id="pageInfo" class="page-info"></span>
+        <div style="display:flex;gap:6px">
+          <button id="prevPage" class="pg-btn" disabled>
+            <span class="material-icons-round" style="font-size:18px">chevron_left</span>
+          </button>
+          <button id="nextPage" class="pg-btn">
+            <span class="material-icons-round" style="font-size:18px">chevron_right</span>
+          </button>
         </div>
-        <p id="itemsEmpty" style="color:var(--text-muted);font-size:0.85rem;margin-top:8px">Agregue al menos un ítem.</p>
       </div>
+    </div>
 
-      <div class="form-group">
-        <label for="notas">Notas generales</label>
-        <textarea id="notas" name="notas" class="form-control" rows={2} placeholder="Instrucciones especiales para la cocina…"></textarea>
-      </div>
+    <!-- ════════════════════════ DERECHA ══════════════════════════ -->
+    <div class="order-pane">
+      <div class="order-sticky" id="orderSticky">
 
-      <div style="display:flex;gap:10px;justify-content:flex-end">
-        <a href="/comandas" class="btn btn-secondary">Cancelar</a>
-        <button type="submit" class="btn btn-primary" id="submitBtn">
-          <span class="material-icons-round" style="font-size:18px">send</span>
-          Enviar a cocina
-        </button>
-      </div>
-    </form>
-  </div>
+        <div class="order-header">
+          <span class="material-icons-round" style="font-size:20px;color:var(--primary)">receipt_long</span>
+          <span style="font-weight:700;font-size:1rem">Comanda</span>
+          <span class="order-count" id="orderCount">0 ítems</span>
+        </div>
+
+        <!-- Metadatos: mesa, cliente, prioridad -->
+        <div class="order-meta">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="form-group" style="margin:0">
+              <label class="meta-label" for="fMesa">Mesa / Área</label>
+              <input id="fMesa" type="text" class="form-control form-sm" placeholder="Mesa 5…" />
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="meta-label" for="fCliente">Cliente</label>
+              <input id="fCliente" type="text" class="form-control form-sm" placeholder="Nombre…" />
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+            <div class="form-group" style="margin:0">
+              <label class="meta-label" for="fPrioridad">Prioridad</label>
+              <select id="fPrioridad" class="form-control form-sm">
+                <option value="baja">Baja</option>
+                <option value="normal" selected>Normal</option>
+                <option value="alta">Alta</option>
+                <option value="urgente">🚨 Urgente</option>
+              </select>
+            </div>
+            {pendientes.length > 0 && (
+              <div class="form-group" style="margin:0">
+                <label class="meta-label" for="fPedido">Desde pedido</label>
+                <select id="fPedido" class="form-control form-sm">
+                  <option value="">— Manual —</option>
+                  {pendientes.map(p => (
+                    <option
+                      value={p.id}
+                      data-cliente={p.clienteNombre}
+                      data-items={JSON.stringify(p.items)}
+                    >
+                      {p.numero}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div class="order-divider"></div>
+
+        <!-- Lista de ítems seleccionados -->
+        <div class="order-items" id="orderItems">
+          <div class="order-empty" id="orderEmpty">
+            <span class="material-icons-round" style="font-size:36px;color:var(--border)">add_shopping_cart</span>
+            <span>Selecciona productos del catálogo</span>
+          </div>
+        </div>
+
+        <!-- Totales -->
+        <div class="order-totals" id="orderTotals" style="display:none">
+          <div class="order-divider" style="margin:0 0 12px"></div>
+          <div class="total-row">
+            <span>Subtotal</span>
+            <span id="totalSubtotal">$0.00</span>
+          </div>
+          <div class="total-row total-row--main">
+            <span>Total</span>
+            <span id="totalFinal">$0.00</span>
+          </div>
+        </div>
+
+        <!-- Notas generales -->
+        <div style="margin-top:12px">
+          <label class="meta-label" for="fNotas">Notas para cocina</label>
+          <textarea id="fNotas" class="form-control form-sm" rows={2} placeholder="Sin cebolla en mesa 5, bien cocido…" style="resize:none"></textarea>
+        </div>
+
+        <!-- Botón enviar + form oculto -->
+        <form method="POST" id="cmdForm" style="margin-top:14px">
+          <!-- Inputs ocultos — se populan desde JS antes del submit -->
+          <input type="hidden" name="pedidoId"      id="hPedidoId" />
+          <input type="hidden" name="mesa"           id="hMesa" />
+          <input type="hidden" name="clienteNombre"  id="hClienteNombre" />
+          <input type="hidden" name="prioridad"      id="hPrioridad" />
+          <input type="hidden" name="notas"          id="hNotas" />
+          <div id="hItems"></div><!-- aquí van los arrays de ítems -->
+
+          <button
+            type="submit"
+            id="submitBtn"
+            class="btn btn-primary"
+            style="width:100%;justify-content:center;padding:12px;gap:8px"
+            disabled
+          >
+            <span class="material-icons-round" style="font-size:18px">send</span>
+            Enviar a cocina
+          </button>
+        </form>
+
+      </div><!-- /order-sticky -->
+    </div><!-- /order-pane -->
+  </div><!-- /nc-layout -->
 </AdminLayout>
 
 <style>
-  .items-table-wrap {
+  /* ── Layout split ───────────────────────────────────────────── */
+  .nc-layout {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 20px;
+    align-items: start;
+    /* Compensar el padding del .content para usar más ancho */
+    margin: -24px;
+    padding: 24px;
+  }
+
+  @media (max-width: 960px) {
+    .nc-layout { grid-template-columns: 1fr; }
+    .order-sticky { position: static !important; }
+  }
+
+  /* ── Picker (izquierda) ─────────────────────────────────────── */
+  .picker-pane {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 0;
+  }
+
+  .picker-header {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .picker-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .btn-back {
+    display: flex;
+    align-items: center;
+    padding: 6px;
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: background 0.15s, color 0.15s;
+  }
+  .btn-back:hover { background: var(--bg); color: var(--text); }
+
+  /* Búsqueda */
+  .search-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 12px;
+    font-size: 20px !important;
+    color: var(--text-muted);
+    pointer-events: none;
+  }
+
+  .search-field {
+    width: 100%;
+    padding: 10px 36px 10px 40px;
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    overflow: hidden;
+    font-size: 0.9rem;
+    background: white;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    outline: none;
+  }
+  .search-field:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
   }
 
-  .items-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.875rem;
-  }
-
-  .items-table th {
-    background: var(--bg);
-    padding: 8px 12px;
-    text-align: left;
-    font-weight: 600;
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    border-bottom: 1px solid var(--border);
-  }
-
-  .items-table td {
-    padding: 7px 10px;
-    border-bottom: 1px solid var(--border);
-    vertical-align: middle;
-  }
-
-  .items-table tr:last-child td { border-bottom: none; }
-
-  .items-table .form-control { font-size: 0.875rem; padding: 5px 8px; }
-
-  .btn-remove-item {
+  .clear-btn {
+    position: absolute;
+    right: 8px;
     background: none;
     border: none;
     cursor: pointer;
-    color: var(--danger);
+    color: var(--text-muted);
     padding: 4px;
-    border-radius: 4px;
     display: flex;
     align-items: center;
+    border-radius: 4px;
     transition: background 0.15s;
   }
-  .btn-remove-item:hover { background: #fee2e2; }
+  .clear-btn:hover { background: var(--bg); }
+
+  /* ── Product grid ───────────────────────────────────────────── */
+  .prod-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+  }
+
+  /* Card del producto */
+  .prod-card {
+    background: white;
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+    position: relative;
+    user-select: none;
+  }
+
+  .prod-card:hover {
+    border-color: var(--primary);
+    box-shadow: 0 4px 16px rgba(37,99,235,0.15);
+    transform: translateY(-2px);
+  }
+
+  .prod-card.selected {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.18);
+  }
+
+  /* Zona de imagen/avatar con efecto de opacidad */
+  .prod-img-wrap {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+    /* ← opacidad reducida por defecto */
+    opacity: 0.55;
+    transition: opacity 0.25s ease;
+  }
+
+  .prod-card:hover  .prod-img-wrap { opacity: 1; }
+  .prod-card.selected .prod-img-wrap { opacity: 0.9; }
+
+  .prod-avatar {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.4rem;
+    font-weight: 800;
+    color: rgba(255,255,255,0.9);
+    letter-spacing: -1px;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.18);
+  }
+
+  /* Cantidad badge sobre la imagen cuando está seleccionado */
+  .qty-badge {
+    position: absolute;
+    top: 7px;
+    right: 7px;
+    background: var(--primary);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 700;
+    min-width: 22px;
+    height: 22px;
+    border-radius: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 5px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+  }
+
+  /* Info del producto debajo del avatar */
+  .prod-info {
+    padding: 8px 10px 10px;
+    border-top: 1px solid var(--border);
+  }
+
+  .prod-name {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.35;
+    /* Clamp 2 líneas, sin overflow */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-bottom: 4px;
+    min-height: 2.1em;
+  }
+
+  .prod-price {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--primary);
+  }
+
+  .prod-code {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 1px;
+  }
+
+  /* Estado vacío de la grid */
+  .grid-empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* ── Paginación ─────────────────────────────────────────────── */
+  .picker-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 0;
+  }
+
+  .page-info {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+  }
+
+  .pg-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: white;
+    cursor: pointer;
+    color: var(--text);
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .pg-btn:hover:not(:disabled) { background: var(--bg); border-color: var(--primary); }
+  .pg-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── Panel de orden (derecha) ───────────────────────────────── */
+  .order-pane { position: relative; }
+
+  .order-sticky {
+    position: sticky;
+    top: calc(var(--navbar-height) + 16px);
+    max-height: calc(100vh - var(--navbar-height) - 32px);
+    overflow-y: auto;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: var(--shadow-lg);
+    scrollbar-width: thin;
+  }
+
+  .order-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .order-count {
+    margin-left: auto;
+    background: var(--primary-light);
+    color: var(--primary);
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 2px 10px;
+    border-radius: 20px;
+  }
+
+  .order-meta .meta-label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+
+  .form-sm {
+    padding: 6px 9px;
+    font-size: 0.82rem;
+  }
+
+  .order-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 0;
+  }
+
+  /* Lista de ítems en orden */
+  .order-items {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1;
+    min-height: 60px;
+  }
+
+  .order-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 24px 0;
+    color: var(--text-muted);
+    font-size: 0.83rem;
+  }
+
+  /* Fila de ítem en orden */
+  .order-item {
+    background: var(--bg);
+    border-radius: 8px;
+    padding: 9px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .order-item-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .order-item-name {
+    flex: 1;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.3;
+    /* clamp a 2 líneas */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .order-item-price {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .order-item-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .qty-controls {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .qty-btn {
+    background: white;
+    border: none;
+    cursor: pointer;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text);
+    font-size: 1rem;
+    font-weight: 700;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+  .qty-btn:hover { background: var(--bg); }
+
+  .qty-val {
+    width: 28px;
+    text-align: center;
+    font-size: 0.82rem;
+    font-weight: 700;
+    border: none;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    outline: none;
+    padding: 0;
+    background: white;
+    color: var(--text);
+  }
+
+  /* ocultar flechas del input number */
+  .qty-val::-webkit-inner-spin-button,
+  .qty-val::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .qty-val { -moz-appearance: textfield; }
+
+  .order-item-subtotal {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--text);
+    white-space: nowrap;
+  }
+
+  .order-item-notas {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 4px 7px;
+    width: 100%;
+    box-sizing: border-box;
+    resize: none;
+    height: 30px;
+    line-height: 1.4;
+    transition: height 0.15s, border-color 0.15s;
+    outline: none;
+    overflow: hidden;
+  }
+  .order-item-notas:focus {
+    border-color: var(--primary);
+    height: 50px;
+    overflow: auto;
+  }
+
+  .btn-remove-order {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    border-radius: 4px;
+    flex-shrink: 0;
+    transition: color 0.15s, background 0.15s;
+  }
+  .btn-remove-order:hover { color: var(--danger); background: #fee2e2; }
+
+  /* Totales */
+  .order-totals { display: flex; flex-direction: column; gap: 6px; }
+
+  .total-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  .total-row--main {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text);
+  }
 </style>
 
-<script define:vars={{ productos }}>
-  const itemsBody  = document.getElementById('itemsBody');
-  const itemsEmpty = document.getElementById('itemsEmpty');
-  let rowIndex = 0;
+<script define:vars={{ productos, pendientes }}>
+  import { gsap } from 'gsap';
 
-  function updateEmpty() {
-    itemsEmpty.style.display = itemsBody.rows.length === 0 ? 'block' : 'none';
+  // ── Constantes ─────────────────────────────────────────────────
+  const PER_PAGE = 15;
+
+  // ── Estado ─────────────────────────────────────────────────────
+  // items: Map<productoId, { id, nombre, precio, cantidad, notas }>
+  const order = new Map();
+  let currentPage = 1;
+  let currentSearch = '';
+  let pedidoIdSeleccionado = '';
+
+  // ── Paleta de colores para avatares ───────────────────────────
+  const PALETTE = [
+    '#6366f1','#0ea5e9','#10b981','#f59e0b',
+    '#ef4444','#8b5cf6','#ec4899','#14b8a6',
+    '#f97316','#84cc16','#3b82f6','#a855f7',
+  ];
+
+  function avatarColor(name) {
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
+    return PALETTE[Math.abs(h) % PALETTE.length];
   }
 
-  function addRow(productoId = '', productoNombre = '', cantidad = 1, notas = '') {
-    const idx = rowIndex++;
-    const opts = productos.map(p =>
-      `<option value="${p.id}" data-nombre="${p.nombre.replace(/"/g, '&quot;')}"${p.id == productoId ? ' selected' : ''}>${p.nombre}</option>`
-    ).join('');
-
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>
-        <select name="productoId[]" class="form-control producto-select" data-idx="${idx}">
-          <option value="">— Seleccionar —</option>
-          ${opts}
-        </select>
-        <input type="hidden" name="productoNombre[]" class="nombre-hidden" value="${productoNombre}">
-      </td>
-      <td>
-        <input type="number" name="cantidad[]" class="form-control" value="${cantidad}" min="1" step="1" style="width:70px">
-      </td>
-      <td>
-        <input type="text" name="notaItem[]" class="form-control" value="${notas}" placeholder="sin cebolla, bien cocido…">
-      </td>
-      <td>
-        <button type="button" class="btn-remove-item" title="Eliminar">
-          <span class="material-icons-round" style="font-size:16px">delete</span>
-        </button>
-      </td>
-    `;
-
-    // Sync nombre al cambiar select
-    tr.querySelector('.producto-select').addEventListener('change', function() {
-      const opt = this.options[this.selectedIndex];
-      tr.querySelector('.nombre-hidden').value = opt.dataset.nombre ?? '';
-    });
-
-    tr.querySelector('.btn-remove-item').addEventListener('click', () => {
-      tr.remove();
-      updateEmpty();
-    });
-
-    itemsBody.appendChild(tr);
-    updateEmpty();
+  function fmt(n) {
+    return '$' + Number(n).toFixed(2);
   }
 
-  document.getElementById('addItemBtn').addEventListener('click', () => addRow());
-  updateEmpty();
+  // ── Filtrado + paginación ──────────────────────────────────────
+  function getFiltered() {
+    const q = currentSearch.toLowerCase().trim();
+    if (!q) return productos;
+    return productos.filter(p =>
+      p.nombre.toLowerCase().includes(q) ||
+      (p.codigo && p.codigo.toLowerCase().includes(q)) ||
+      (p.departamento && p.departamento.toLowerCase().includes(q))
+    );
+  }
+
+  function getPage(filtered) {
+    const start = (currentPage - 1) * PER_PAGE;
+    return filtered.slice(start, start + PER_PAGE);
+  }
+
+  // ── Render de la grid ──────────────────────────────────────────
+  function renderGrid() {
+    const grid    = document.getElementById('prodGrid');
+    const filtered = getFiltered();
+    const total   = filtered.length;
+    const totalPg = Math.ceil(total / PER_PAGE) || 1;
+    if (currentPage > totalPg) currentPage = totalPg;
+    const page = getPage(filtered);
+
+    // Paginación info
+    document.getElementById('pageInfo').textContent =
+      total > 0
+        ? `${(currentPage - 1) * PER_PAGE + 1}–${Math.min(currentPage * PER_PAGE, total)} de ${total}`
+        : '0 resultados';
+    document.getElementById('prevPage').disabled = currentPage <= 1;
+    document.getElementById('nextPage').disabled = currentPage >= totalPg;
+
+    if (page.length === 0) {
+      grid.innerHTML = `
+        <div class="grid-empty">
+          <span class="material-icons-round" style="font-size:40px">search_off</span>
+          <span>Sin resultados para "<strong>${currentSearch}</strong>"</span>
+        </div>`;
+      return;
+    }
+
+    grid.innerHTML = page.map(p => {
+      const inOrder  = order.has(p.id);
+      const qty      = inOrder ? order.get(p.id).cantidad : 0;
+      const color    = avatarColor(p.nombre);
+      const initial  = p.nombre.charAt(0).toUpperCase();
+      return `
+        <div
+          class="prod-card${inOrder ? ' selected' : ''}"
+          data-id="${p.id}"
+          data-nombre="${p.nombre.replace(/"/g, '&quot;')}"
+          data-precio="${p.precio}"
+          title="${p.nombre}"
+        >
+          <div class="prod-img-wrap" style="background:${color}">
+            <div class="prod-avatar">${initial}</div>
+            ${inOrder ? `<div class="qty-badge">${qty}</div>` : ''}
+          </div>
+          <div class="prod-info">
+            <div class="prod-name">${p.nombre}</div>
+            <div class="prod-price">${fmt(p.precio)}</div>
+            ${p.codigo ? `<div class="prod-code">${p.codigo}</div>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+
+    // Eventos de click en cards
+    grid.querySelectorAll('.prod-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const id     = card.dataset.id;
+        const nombre = card.dataset.nombre;
+        const precio = parseFloat(card.dataset.precio) || 0;
+        addToOrder(id, nombre, precio);
+      });
+    });
+
+    // Animación de entrada
+    gsap.from('.prod-card', {
+      opacity: 0, y: 10, duration: 0.25,
+      stagger: 0.025, ease: 'power2.out', clearProps: 'all'
+    });
+  }
+
+  // ── Orden: agregar / actualizar ────────────────────────────────
+  function addToOrder(id, nombre, precio) {
+    if (order.has(id)) {
+      order.get(id).cantidad += 1;
+    } else {
+      order.set(id, { id, nombre, precio, cantidad: 1, notas: '' });
+    }
+    renderGrid();
+    renderOrder();
+    // Pulso en el panel
+    gsap.from('#orderSticky', { scale: 0.99, duration: 0.15, ease: 'power2.out' });
+  }
+
+  function removeFromOrder(id) {
+    order.delete(id);
+    renderGrid();
+    renderOrder();
+  }
+
+  function setQty(id, qty) {
+    qty = Math.max(1, parseInt(qty) || 1);
+    if (order.has(id)) order.get(id).cantidad = qty;
+    renderGrid();
+    renderOrder(id); // re-render manteniendo foco
+  }
+
+  // ── Render del panel de orden ──────────────────────────────────
+  function renderOrder(keepFocusId = null) {
+    const items    = [...order.values()];
+    const container = document.getElementById('orderItems');
+    const emptyEl  = document.getElementById('orderEmpty');
+    const totals   = document.getElementById('orderTotals');
+    const countEl  = document.getElementById('orderCount');
+    const submitBtn = document.getElementById('submitBtn');
+
+    countEl.textContent = items.length === 1 ? '1 ítem' : `${items.length} ítems`;
+    submitBtn.disabled  = items.length === 0;
+
+    if (items.length === 0) {
+      container.innerHTML = '';
+      container.appendChild(emptyEl);
+      emptyEl.style.display = 'flex';
+      totals.style.display = 'none';
+      return;
+    }
+
+    emptyEl.style.display = 'none';
+    totals.style.display  = 'flex';
+
+    // Guardar notas antes de re-renderizar
+    container.querySelectorAll('.order-item').forEach(row => {
+      const id = row.dataset.id;
+      if (order.has(id)) {
+        order.get(id).notas = row.querySelector('.order-item-notas')?.value ?? '';
+      }
+    });
+
+    container.innerHTML = items.map(item => `
+      <div class="order-item" data-id="${item.id}">
+        <div class="order-item-top">
+          <div class="order-item-name">${item.nombre}</div>
+          <span class="order-item-price">${fmt(item.precio)} c/u</span>
+          <button type="button" class="btn-remove-order" data-remove="${item.id}" title="Quitar">
+            <span class="material-icons-round" style="font-size:16px">close</span>
+          </button>
+        </div>
+        <div class="order-item-controls">
+          <div class="qty-controls">
+            <button type="button" class="qty-btn" data-dec="${item.id}">−</button>
+            <input
+              type="number"
+              class="qty-val"
+              value="${item.cantidad}"
+              min="1"
+              data-qty="${item.id}"
+            />
+            <button type="button" class="qty-btn" data-inc="${item.id}">+</button>
+          </div>
+          <span class="order-item-subtotal">${fmt(item.precio * item.cantidad)}</span>
+        </div>
+        <textarea
+          class="order-item-notas"
+          placeholder="instrucciones…"
+          data-nota="${item.id}"
+        >${item.notas}</textarea>
+      </div>
+    `).join('');
+
+    // Eventos qty
+    container.querySelectorAll('[data-dec]').forEach(btn =>
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.dec;
+        const cur = order.get(id);
+        if (cur) setQty(id, cur.cantidad - 1);
+      })
+    );
+    container.querySelectorAll('[data-inc]').forEach(btn =>
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.inc;
+        const cur = order.get(id);
+        if (cur) setQty(id, cur.cantidad + 1);
+      })
+    );
+    container.querySelectorAll('[data-qty]').forEach(input => {
+      input.addEventListener('change', () => setQty(input.dataset.qty, input.value));
+    });
+    container.querySelectorAll('[data-remove]').forEach(btn =>
+      btn.addEventListener('click', () => removeFromOrder(btn.dataset.remove))
+    );
+    container.querySelectorAll('[data-nota]').forEach(ta => {
+      ta.addEventListener('input', () => {
+        if (order.has(ta.dataset.nota)) order.get(ta.dataset.nota).notas = ta.value;
+      });
+    });
+
+    // Totales
+    const subtotal = items.reduce((s, i) => s + i.precio * i.cantidad, 0);
+    document.getElementById('totalSubtotal').textContent = fmt(subtotal);
+    document.getElementById('totalFinal').textContent    = fmt(subtotal);
+  }
+
+  // ── Búsqueda ───────────────────────────────────────────────────
+  const searchInput = document.getElementById('searchInput');
+  const clearBtn    = document.getElementById('clearSearch');
+
+  let searchTimer = null;
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      currentSearch = searchInput.value;
+      currentPage   = 1;
+      clearBtn.style.display = currentSearch ? 'flex' : 'none';
+      renderGrid();
+    }, 160);
+  });
+
+  clearBtn.addEventListener('click', () => {
+    searchInput.value = '';
+    currentSearch     = '';
+    currentPage       = 1;
+    clearBtn.style.display = 'none';
+    renderGrid();
+    searchInput.focus();
+  });
+
+  // ── Paginación ─────────────────────────────────────────────────
+  document.getElementById('prevPage').addEventListener('click', () => {
+    if (currentPage > 1) { currentPage--; renderGrid(); }
+  });
+  document.getElementById('nextPage').addEventListener('click', () => {
+    currentPage++;
+    renderGrid();
+  });
 
   // ── Importar desde pedido ──────────────────────────────────────
-  const selectPedido = document.getElementById('selectPedido');
-  const pedidoIdInput = document.getElementById('pedidoIdInput');
-
-  if (selectPedido) {
-    selectPedido.addEventListener('change', function() {
-      pedidoIdInput.value = this.value;
+  const fPedido = document.getElementById('fPedido');
+  if (fPedido) {
+    fPedido.addEventListener('change', function() {
+      pedidoIdSeleccionado = this.value;
       if (!this.value) return;
-      // Limpiar ítems actuales
-      itemsBody.innerHTML = '';
       const opt = this.options[this.selectedIndex];
       const items = JSON.parse(opt.dataset.items ?? '[]');
-      const cliente = opt.dataset.cliente ?? '';
-      document.getElementById('clienteNombre').value = cliente;
-      items.forEach(i => addRow(i.productoId, i.productoNombre, i.cantidad, ''));
+      document.getElementById('fCliente').value = opt.dataset.cliente ?? '';
+      // Agregar items al orden
+      order.clear();
+      items.forEach(i => {
+        const prod = productos.find(p => p.id === String(i.productoId));
+        order.set(String(i.productoId), {
+          id:       String(i.productoId),
+          nombre:   i.productoNombre,
+          precio:   prod?.precio ?? i.precioUnitario ?? 0,
+          cantidad: i.cantidad,
+          notas:    '',
+        });
+      });
+      renderGrid();
+      renderOrder();
     });
   }
+
+  // ── Submit: poblar hidden inputs y enviar ─────────────────────
+  document.getElementById('cmdForm').addEventListener('submit', function(e) {
+    // Capturar notas actuales antes de serializar
+    document.querySelectorAll('[data-nota]').forEach(ta => {
+      if (order.has(ta.dataset.nota)) order.get(ta.dataset.nota).notas = ta.value;
+    });
+
+    document.getElementById('hPedidoId').value      = pedidoIdSeleccionado;
+    document.getElementById('hMesa').value           = document.getElementById('fMesa').value;
+    document.getElementById('hClienteNombre').value  = document.getElementById('fCliente').value;
+    document.getElementById('hPrioridad').value      = document.getElementById('fPrioridad').value;
+    document.getElementById('hNotas').value           = document.getElementById('fNotas').value;
+
+    const hItems = document.getElementById('hItems');
+    hItems.innerHTML = '';
+    [...order.values()].forEach(item => {
+      const mk = (name, val) => {
+        const inp = document.createElement('input');
+        inp.type = 'hidden';
+        inp.name = name;
+        inp.value = String(val);
+        hItems.appendChild(inp);
+      };
+      mk('productoId[]',    item.id);
+      mk('productoNombre[]', item.nombre);
+      mk('cantidad[]',      item.cantidad);
+      mk('notaItem[]',      item.notas);
+    });
+  });
+
+  // ── Init ───────────────────────────────────────────────────────
+  renderGrid();
+  renderOrder();
+
+  // Animación inicial del panel
+  gsap.from('.order-sticky', { opacity: 0, x: 16, duration: 0.4, ease: 'power2.out' });
 </script>

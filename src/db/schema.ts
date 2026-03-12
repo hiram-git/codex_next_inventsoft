@@ -139,6 +139,7 @@ export const productos = pgTable('productos', {
   maximoInventario:   numeric('maximo_inventario', { precision: 12, scale: 2 }).default('0'),
   // Tipo: 'simple' = stock propio | 'compuesto' = armado desde ingredientes | 'kit' = bundle con precio custom
   tipoProducto: varchar('tipo_producto', { length: 20 }).default('simple').notNull(),
+  imagen: text('imagen').default(''),
   activo: boolean('activo').default(true).notNull(),
 });
 
@@ -171,6 +172,7 @@ export const servicios = pgTable('servicios', {
   precioA: jsonb('precio_a').$type<PrecioNivel>(),
   precioB: jsonb('precio_b').$type<PrecioNivel>(),
   precioC: jsonb('precio_c').$type<PrecioNivel>(),
+  imagen: text('imagen').default(''),
   activo: boolean('activo').default(true).notNull(),
 });
 

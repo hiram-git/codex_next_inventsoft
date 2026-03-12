@@ -34,6 +34,8 @@ if (Astro.request.method === 'POST') {
   const precioB           = parsePrecio(formData.get('precioB')?.toString() ?? '');
   const precioC           = parsePrecio(formData.get('precioC')?.toString() ?? '');
 
+  const imagen = formData.get('imagen')?.toString() ?? '';
+
   const data = {
     codigo,
     referencia,
@@ -59,6 +61,7 @@ if (Astro.request.method === 'POST') {
     stock: parseInt(stockStr) || 0,
     minimoInventario: parseFloat(minStr) || 0,
     maximoInventario: parseFloat(maxStr) || 0,
+    imagen,
     activo: formData.get('activo') === 'on',
   };
 
@@ -102,6 +105,11 @@ const [departamentos, grupos, marcas, lineas] = await Promise.all([
           <label>Nombre <span style="color:var(--danger)">*</span></label>
           <input type="text" name="nombre" class="form-control" required />
         </div>
+      </div>
+      <div class="form-group" style="margin-top:12px">
+        <label>URL de Imagen</label>
+        <input type="url" name="imagen" class="form-control" placeholder="https://ejemplo.com/imagen.jpg" />
+        <span style="font-size:0.75rem;color:var(--text-muted)">URL pública de la imagen del producto (se mostrará en comandas)</span>
       </div>
     </div>
 

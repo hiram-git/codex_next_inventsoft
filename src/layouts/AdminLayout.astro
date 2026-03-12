@@ -34,6 +34,11 @@ const inventarioItems = [
   { href: '/kardex', label: 'Kardex', icon: 'swap_vert' },
 ];
 
+const cocinaItems = [
+  { href: '/comandas', label: 'Comandas (Cocina)', icon: 'restaurant' },
+  { href: '/comandas/nueva', label: 'Nueva Comanda', icon: 'add_circle_outline' },
+];
+
 const reportesItems = [
   { href: '/reportes/ventas', label: 'Ventas Mensuales', icon: 'bar_chart' },
 ];
@@ -105,6 +110,21 @@ const configItems = [
         <div class="nav-section-links">
           {inventarioItems.map(item => (
             <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) }]} title={item.label}>
+              <span class="material-icons-round">{item.icon}</span>
+              <span class="nav-link-label">{item.label}</span>
+            </a>
+          ))}
+        </div>
+      </div>
+
+      <div class="nav-section" data-section="cocina">
+        <button class="nav-section-title" type="button">
+          <span>Cocina</span>
+          <span class="material-icons-round section-chevron">expand_less</span>
+        </button>
+        <div class="nav-section-links">
+          {cocinaItems.map(item => (
+            <a href={item.href} class:list={['nav-link', { active: currentPath.startsWith(item.href) && item.href !== '/comandas/nueva' || currentPath === item.href }]} title={item.label}>
               <span class="material-icons-round">{item.icon}</span>
               <span class="nav-link-label">{item.label}</span>
             </a>

@@ -1,0 +1,273 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { store } from '../../lib/store';
+
+let error = '';
+let success = '';
+
+if (Astro.request.method === 'POST') {
+  const fd = await Astro.request.formData();
+  const pedidoId   = fd.get('pedidoId')?.toString() ?? '';
+  const mesa       = fd.get('mesa')?.toString() ?? '';
+  const clienteNombre = fd.get('clienteNombre')?.toString() ?? '';
+  const prioridad  = fd.get('prioridad')?.toString() ?? 'normal';
+  const notas      = fd.get('notas')?.toString() ?? '';
+
+  // Recoger items dinámicos
+  const productosIds    = fd.getAll('productoId[]');
+  const productosNombres = fd.getAll('productoNombre[]');
+  const cantidades      = fd.getAll('cantidad[]');
+  const notasItems      = fd.getAll('notaItem[]');
+
+  const items = productosIds
+    .map((pid, idx) => ({
+      productoId:    String(pid),
+      productoNombre: String(productosNombres[idx] ?? ''),
+      cantidad:      Number(cantidades[idx] ?? 1),
+      notas:         String(notasItems[idx] ?? ''),
+    }))
+    .filter(i => i.productoId && i.productoNombre && i.cantidad > 0);
+
+  if (items.length === 0) {
+    error = 'Debe agregar al menos un ítem.';
+  } else {
+    try {
+      await store.crearComanda({
+        pedidoId:     pedidoId || undefined,
+        pedidoNumero: pedidoId
+          ? (await store.getPedido(pedidoId))?.numero
+          : undefined,
+        mesa,
+        clienteNombre,
+        items,
+        prioridad,
+        notas,
+      });
+      return Astro.redirect('/comandas');
+    } catch (e) {
+      error = 'Error al crear la comanda. Intente nuevamente.';
+    }
+  }
+}
+
+// Pedidos confirmados sin comanda activa (para "crear desde pedido")
+const pedidos   = await store.getPedidos();
+const pendientes = pedidos.filter(p => p.estado === 'confirmado');
+const productos  = await store.getProductos();
+---
+
+<AdminLayout title="Nueva Comanda">
+  <div class="page-header">
+    <h1>Nueva Comanda</h1>
+    <a href="/comandas" class="btn btn-secondary">
+      <span class="material-icons-round" style="font-size:18px">arrow_back</span>
+      Volver
+    </a>
+  </div>
+
+  {error && <div class="alert alert-error" style="margin-bottom:20px">{error}</div>}
+
+  <div class="card" style="max-width:760px">
+    <form method="POST" id="cmdForm">
+
+      <!-- Atajo: importar desde pedido -->
+      {pendientes.length > 0 && (
+        <div class="form-group">
+          <label>Importar desde pedido <span style="color:var(--text-muted);font-weight:400">(opcional)</span></label>
+          <select id="selectPedido" class="form-control" style="max-width:360px">
+            <option value="">— Crear comanda manual —</option>
+            {pendientes.map(p => (
+              <option value={p.id} data-cliente={p.clienteNombre} data-items={JSON.stringify(p.items)}>
+                {p.numero} — {p.clienteNombre}
+              </option>
+            ))}
+          </select>
+          <input type="hidden" name="pedidoId" id="pedidoIdInput" value="" />
+        </div>
+      )}
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="form-group">
+          <label for="clienteNombre">Cliente / Mesa</label>
+          <input id="clienteNombre" name="clienteNombre" type="text" class="form-control" placeholder="Nombre o descripción" />
+        </div>
+        <div class="form-group">
+          <label for="mesa">Mesa / Área</label>
+          <input id="mesa" name="mesa" type="text" class="form-control" placeholder="Ej: Mesa 5, Terraza…" />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="prioridad">Prioridad</label>
+        <select id="prioridad" name="prioridad" class="form-control" style="max-width:240px">
+          <option value="baja">Baja</option>
+          <option value="normal" selected>Normal</option>
+          <option value="alta">Alta</option>
+          <option value="urgente">🚨 Urgente</option>
+        </select>
+      </div>
+
+      <!-- Tabla de ítems -->
+      <div class="form-group">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <label style="margin:0">Ítems de la comanda</label>
+          <button type="button" id="addItemBtn" class="btn btn-secondary btn-sm">
+            <span class="material-icons-round" style="font-size:16px">add</span>
+            Agregar ítem
+          </button>
+        </div>
+
+        <div class="items-table-wrap">
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th style="width:80px">Cantidad</th>
+                <th>Notas / instrucciones</th>
+                <th style="width:44px"></th>
+              </tr>
+            </thead>
+            <tbody id="itemsBody">
+              <!-- filas dinámicas -->
+            </tbody>
+          </table>
+        </div>
+        <p id="itemsEmpty" style="color:var(--text-muted);font-size:0.85rem;margin-top:8px">Agregue al menos un ítem.</p>
+      </div>
+
+      <div class="form-group">
+        <label for="notas">Notas generales</label>
+        <textarea id="notas" name="notas" class="form-control" rows={2} placeholder="Instrucciones especiales para la cocina…"></textarea>
+      </div>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <a href="/comandas" class="btn btn-secondary">Cancelar</a>
+        <button type="submit" class="btn btn-primary" id="submitBtn">
+          <span class="material-icons-round" style="font-size:18px">send</span>
+          Enviar a cocina
+        </button>
+      </div>
+    </form>
+  </div>
+</AdminLayout>
+
+<style>
+  .items-table-wrap {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .items-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+
+  .items-table th {
+    background: var(--bg);
+    padding: 8px 12px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .items-table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+
+  .items-table tr:last-child td { border-bottom: none; }
+
+  .items-table .form-control { font-size: 0.875rem; padding: 5px 8px; }
+
+  .btn-remove-item {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--danger);
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    transition: background 0.15s;
+  }
+  .btn-remove-item:hover { background: #fee2e2; }
+</style>
+
+<script define:vars={{ productos }}>
+  const itemsBody  = document.getElementById('itemsBody');
+  const itemsEmpty = document.getElementById('itemsEmpty');
+  let rowIndex = 0;
+
+  function updateEmpty() {
+    itemsEmpty.style.display = itemsBody.rows.length === 0 ? 'block' : 'none';
+  }
+
+  function addRow(productoId = '', productoNombre = '', cantidad = 1, notas = '') {
+    const idx = rowIndex++;
+    const opts = productos.map(p =>
+      `<option value="${p.id}" data-nombre="${p.nombre.replace(/"/g, '&quot;')}"${p.id == productoId ? ' selected' : ''}>${p.nombre}</option>`
+    ).join('');
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>
+        <select name="productoId[]" class="form-control producto-select" data-idx="${idx}">
+          <option value="">— Seleccionar —</option>
+          ${opts}
+        </select>
+        <input type="hidden" name="productoNombre[]" class="nombre-hidden" value="${productoNombre}">
+      </td>
+      <td>
+        <input type="number" name="cantidad[]" class="form-control" value="${cantidad}" min="1" step="1" style="width:70px">
+      </td>
+      <td>
+        <input type="text" name="notaItem[]" class="form-control" value="${notas}" placeholder="sin cebolla, bien cocido…">
+      </td>
+      <td>
+        <button type="button" class="btn-remove-item" title="Eliminar">
+          <span class="material-icons-round" style="font-size:16px">delete</span>
+        </button>
+      </td>
+    `;
+
+    // Sync nombre al cambiar select
+    tr.querySelector('.producto-select').addEventListener('change', function() {
+      const opt = this.options[this.selectedIndex];
+      tr.querySelector('.nombre-hidden').value = opt.dataset.nombre ?? '';
+    });
+
+    tr.querySelector('.btn-remove-item').addEventListener('click', () => {
+      tr.remove();
+      updateEmpty();
+    });
+
+    itemsBody.appendChild(tr);
+    updateEmpty();
+  }
+
+  document.getElementById('addItemBtn').addEventListener('click', () => addRow());
+  updateEmpty();
+
+  // ── Importar desde pedido ──────────────────────────────────────
+  const selectPedido = document.getElementById('selectPedido');
+  const pedidoIdInput = document.getElementById('pedidoIdInput');
+
+  if (selectPedido) {
+    selectPedido.addEventListener('change', function() {
+      pedidoIdInput.value = this.value;
+      if (!this.value) return;
+      // Limpiar ítems actuales
+      itemsBody.innerHTML = '';
+      const opt = this.options[this.selectedIndex];
+      const items = JSON.parse(opt.dataset.items ?? '[]');
+      const cliente = opt.dataset.cliente ?? '';
+      document.getElementById('clienteNombre').value = cliente;
+      items.forEach(i => addRow(i.productoId, i.productoNombre, i.cantidad, ''));
+    });
+  }
+</script>

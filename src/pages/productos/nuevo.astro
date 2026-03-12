@@ -87,180 +87,208 @@ const [departamentos, grupos, marcas, lineas] = await Promise.all([
 
   <form method="POST" id="productoForm">
 
-    <!-- Identificación -->
-    <div class="section-card">
-      <h2 class="section-title">
-        <span class="material-icons-round">badge</span> Identificación
-      </h2>
-      <div class="form-grid-3">
-        <div class="form-group">
-          <label>Código</label>
-          <input type="text" name="codigo" class="form-control" placeholder="SKU-001" />
+    <!-- Tabs navigation -->
+    <div class="tabs-nav">
+      <button type="button" class="tab-btn active" onclick="switchTab('general', this)">
+        <span class="material-icons-round" style="font-size:16px">badge</span> General
+      </button>
+      <button type="button" class="tab-btn" onclick="switchTab('descripciones', this)">
+        <span class="material-icons-round" style="font-size:16px">description</span> Descripciones
+      </button>
+      <button type="button" class="tab-btn" onclick="switchTab('clasificacion', this)">
+        <span class="material-icons-round" style="font-size:16px">category</span> Clasificación
+      </button>
+      <button type="button" class="tab-btn" onclick="switchTab('precios', this)">
+        <span class="material-icons-round" style="font-size:16px">payments</span> Precios
+      </button>
+      <button type="button" class="tab-btn" onclick="switchTab('inventario', this)">
+        <span class="material-icons-round" style="font-size:16px">inventory_2</span> Inventario
+      </button>
+    </div>
+
+    <!-- TAB: General -->
+    <div id="tab-general" class="tab-panel">
+      <div class="section-card">
+        <h2 class="section-title">
+          <span class="material-icons-round">badge</span> Identificación
+        </h2>
+        <div class="form-grid-3">
+          <div class="form-group">
+            <label>Código</label>
+            <input type="text" name="codigo" class="form-control" placeholder="SKU-001" />
+          </div>
+          <div class="form-group">
+            <label>Referencia</label>
+            <input type="text" name="referencia" class="form-control" placeholder="REF-001" />
+          </div>
+          <div class="form-group">
+            <label>Nombre <span style="color:var(--danger)">*</span></label>
+            <input type="text" name="nombre" class="form-control" required />
+          </div>
         </div>
-        <div class="form-group">
-          <label>Referencia</label>
-          <input type="text" name="referencia" class="form-control" placeholder="REF-001" />
-        </div>
-        <div class="form-group">
-          <label>Nombre <span style="color:var(--danger)">*</span></label>
-          <input type="text" name="nombre" class="form-control" required />
+        <div class="form-group" style="margin-top:12px">
+          <label>URL de Imagen</label>
+          <input type="url" name="imagen" class="form-control" placeholder="https://ejemplo.com/imagen.jpg" />
+          <span style="font-size:0.75rem;color:var(--text-muted)">URL pública de la imagen del producto (se mostrará en comandas)</span>
         </div>
       </div>
-      <div class="form-group" style="margin-top:12px">
-        <label>URL de Imagen</label>
-        <input type="url" name="imagen" class="form-control" placeholder="https://ejemplo.com/imagen.jpg" />
-        <span style="font-size:0.75rem;color:var(--text-muted)">URL pública de la imagen del producto (se mostrará en comandas)</span>
+
+      <div class="section-card">
+        <h2 class="section-title">
+          <span class="material-icons-round">toggle_on</span> Estado
+        </h2>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.875rem;font-weight:500;">
+          <input type="checkbox" name="activo" checked /> Producto activo
+        </label>
       </div>
     </div>
 
-    <!-- Descripciones -->
-    <div class="section-card">
-      <h2 class="section-title">
-        <span class="material-icons-round">description</span> Descripciones
-      </h2>
-      <div class="desc-tabs">
-        <button type="button" class="desc-tab active" onclick="showDesc('descripcion',this)">Español</button>
-        <button type="button" class="desc-tab" onclick="showDesc('descripcionIngles',this)">Inglés</button>
-        <button type="button" class="desc-tab" onclick="showDesc('descripcion2',this)">Desc. 2</button>
-        <button type="button" class="desc-tab" onclick="showDesc('descripcion3',this)">Desc. 3</button>
-        <button type="button" class="desc-tab" onclick="showDesc('caracteristicas',this)">Características</button>
-      </div>
-      <textarea name="descripcion"       id="tab_descripcion"       class="form-control desc-area" rows="4" placeholder="Descripción en español"></textarea>
-      <textarea name="descripcionIngles" id="tab_descripcionIngles" class="form-control desc-area" rows="4" placeholder="English description" style="display:none"></textarea>
-      <textarea name="descripcion2"      id="tab_descripcion2"      class="form-control desc-area" rows="4" placeholder="Descripción adicional 2" style="display:none"></textarea>
-      <textarea name="descripcion3"      id="tab_descripcion3"      class="form-control desc-area" rows="4" placeholder="Descripción adicional 3" style="display:none"></textarea>
-      <textarea name="caracteristicas"   id="tab_caracteristicas"   class="form-control desc-area" rows="4" placeholder="Características técnicas" style="display:none"></textarea>
-    </div>
-
-    <!-- Clasificación -->
-    <div class="section-card">
-      <h2 class="section-title">
-        <span class="material-icons-round">category</span> Clasificación
-      </h2>
-      <div class="form-grid-2">
-        <div class="form-group">
-          <label>Departamento</label>
-          <select name="departamentoId" id="selDept" class="form-control"
-            onchange="document.getElementById('deptNombre').value = this.options[this.selectedIndex].dataset.nombre || ''">
-            <option value="">Sin clasificar</option>
-            {departamentos.map(d => (
-              <option value={d.id} data-nombre={d.nombre}>{d.nombre}</option>
-            ))}
-          </select>
-          <input type="hidden" name="departamento" id="deptNombre" />
+    <!-- TAB: Descripciones -->
+    <div id="tab-descripciones" class="tab-panel" style="display:none">
+      <div class="section-card">
+        <h2 class="section-title">
+          <span class="material-icons-round">description</span> Descripciones
+        </h2>
+        <div class="desc-tabs">
+          <button type="button" class="desc-tab active" onclick="showDesc('descripcion',this)">Español</button>
+          <button type="button" class="desc-tab" onclick="showDesc('descripcionIngles',this)">Inglés</button>
+          <button type="button" class="desc-tab" onclick="showDesc('descripcion2',this)">Desc. 2</button>
+          <button type="button" class="desc-tab" onclick="showDesc('descripcion3',this)">Desc. 3</button>
+          <button type="button" class="desc-tab" onclick="showDesc('caracteristicas',this)">Características</button>
         </div>
-        <div class="form-group">
-          <label>Grupo</label>
-          <select name="grupoId" id="selGrupo" class="form-control"
-            onchange="document.getElementById('grupoNombre').value = this.options[this.selectedIndex].dataset.nombre || ''">
-            <option value="">Sin clasificar</option>
-            {grupos.map(g => (
-              <option value={g.id} data-nombre={g.nombre}>{g.nombre}</option>
-            ))}
-          </select>
-          <input type="hidden" name="grupo" id="grupoNombre" />
-        </div>
-        <div class="form-group">
-          <label>Marca</label>
-          <select name="marcaId" id="selMarca" class="form-control"
-            onchange="document.getElementById('marcaNombre').value = this.options[this.selectedIndex].dataset.nombre || ''">
-            <option value="">Sin clasificar</option>
-            {marcas.map(m => (
-              <option value={m.id} data-nombre={m.nombre}>{m.nombre}</option>
-            ))}
-          </select>
-          <input type="hidden" name="marca" id="marcaNombre" />
-        </div>
-        <div class="form-group">
-          <label>Línea</label>
-          <select name="lineaId" id="selLinea" class="form-control"
-            onchange="document.getElementById('lineaNombre').value = this.options[this.selectedIndex].dataset.nombre || ''">
-            <option value="">Sin clasificar</option>
-            {lineas.map(l => (
-              <option value={l.id} data-nombre={l.nombre}>{l.nombre}</option>
-            ))}
-          </select>
-          <input type="hidden" name="linea" id="lineaNombre" />
-        </div>
+        <textarea name="descripcion"       id="tab_descripcion"       class="form-control desc-area" rows="5" placeholder="Descripción en español"></textarea>
+        <textarea name="descripcionIngles" id="tab_descripcionIngles" class="form-control desc-area" rows="5" placeholder="English description" style="display:none"></textarea>
+        <textarea name="descripcion2"      id="tab_descripcion2"      class="form-control desc-area" rows="5" placeholder="Descripción adicional 2" style="display:none"></textarea>
+        <textarea name="descripcion3"      id="tab_descripcion3"      class="form-control desc-area" rows="5" placeholder="Descripción adicional 3" style="display:none"></textarea>
+        <textarea name="caracteristicas"   id="tab_caracteristicas"   class="form-control desc-area" rows="5" placeholder="Características técnicas" style="display:none"></textarea>
       </div>
     </div>
 
-    <!-- Costos y Precios -->
-    <div class="section-card">
-      <h2 class="section-title">
-        <span class="material-icons-round">payments</span> Costos y Precios
-      </h2>
-      <div class="form-group" style="max-width:220px;margin-bottom:20px">
-        <label>Costo <small style="color:var(--text-muted)">(base para utilidad)</small></label>
-        <input type="number" id="costo" name="costo" class="form-control" step="0.01" min="0" value="0"
-          oninput="calcPrecio('A');calcPrecio('B');calcPrecio('C')" />
-      </div>
-
-      <input type="hidden" name="precioA" id="hiddenA" />
-      <input type="hidden" name="precioB" id="hiddenB" />
-      <input type="hidden" name="precioC" id="hiddenC" />
-
-      <table class="price-table">
-        <thead>
-          <tr>
-            <th style="width:90px">Lista</th>
-            <th>Precio (sin IVA)</th>
-            <th>Utilidad %</th>
-            <th>Precio + IVA 16%</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><span class="price-label">Precio A</span></td>
-            <td><input type="number" id="precioA" class="form-control" step="0.01" min="0" value="0" oninput="calcPrecio('A')" /></td>
-            <td><input type="number" id="utilA" class="form-control" readonly value="0.00" /></td>
-            <td><input type="number" id="ivaPA" class="form-control" readonly value="0.00" /></td>
-          </tr>
-          <tr>
-            <td><span class="price-label">Precio B</span></td>
-            <td><input type="number" id="precioB" class="form-control" step="0.01" min="0" value="0" oninput="calcPrecio('B')" /></td>
-            <td><input type="number" id="utilB" class="form-control" readonly value="0.00" /></td>
-            <td><input type="number" id="ivaPB" class="form-control" readonly value="0.00" /></td>
-          </tr>
-          <tr>
-            <td><span class="price-label">Precio C</span></td>
-            <td><input type="number" id="precioC" class="form-control" step="0.01" min="0" value="0" oninput="calcPrecio('C')" /></td>
-            <td><input type="number" id="utilC" class="form-control" readonly value="0.00" /></td>
-            <td><input type="number" id="ivaPC" class="form-control" readonly value="0.00" /></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- Inventario -->
-    <div class="section-card">
-      <h2 class="section-title">
-        <span class="material-icons-round">inventory_2</span> Inventario
-      </h2>
-      <div class="form-grid-3">
-        <div class="form-group">
-          <label>Stock Actual</label>
-          <input type="number" name="stock" class="form-control" min="0" value="0" />
-        </div>
-        <div class="form-group">
-          <label>Mínimo de Inventario</label>
-          <input type="number" name="minimoInventario" class="form-control" min="0" step="0.01" value="0" />
-        </div>
-        <div class="form-group">
-          <label>Máximo de Inventario</label>
-          <input type="number" name="maximoInventario" class="form-control" min="0" step="0.01" value="0" />
+    <!-- TAB: Clasificación -->
+    <div id="tab-clasificacion" class="tab-panel" style="display:none">
+      <div class="section-card">
+        <h2 class="section-title">
+          <span class="material-icons-round">category</span> Clasificación
+        </h2>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label>Departamento</label>
+            <select name="departamentoId" id="selDept" class="form-control"
+              onchange="document.getElementById('deptNombre').value = this.options[this.selectedIndex].dataset.nombre || ''">
+              <option value="">Sin clasificar</option>
+              {departamentos.map(d => (
+                <option value={d.id} data-nombre={d.nombre}>{d.nombre}</option>
+              ))}
+            </select>
+            <input type="hidden" name="departamento" id="deptNombre" />
+          </div>
+          <div class="form-group">
+            <label>Grupo</label>
+            <select name="grupoId" id="selGrupo" class="form-control"
+              onchange="document.getElementById('grupoNombre').value = this.options[this.selectedIndex].dataset.nombre || ''">
+              <option value="">Sin clasificar</option>
+              {grupos.map(g => (
+                <option value={g.id} data-nombre={g.nombre}>{g.nombre}</option>
+              ))}
+            </select>
+            <input type="hidden" name="grupo" id="grupoNombre" />
+          </div>
+          <div class="form-group">
+            <label>Marca</label>
+            <select name="marcaId" id="selMarca" class="form-control"
+              onchange="document.getElementById('marcaNombre').value = this.options[this.selectedIndex].dataset.nombre || ''">
+              <option value="">Sin clasificar</option>
+              {marcas.map(m => (
+                <option value={m.id} data-nombre={m.nombre}>{m.nombre}</option>
+              ))}
+            </select>
+            <input type="hidden" name="marca" id="marcaNombre" />
+          </div>
+          <div class="form-group">
+            <label>Línea</label>
+            <select name="lineaId" id="selLinea" class="form-control"
+              onchange="document.getElementById('lineaNombre').value = this.options[this.selectedIndex].dataset.nombre || ''">
+              <option value="">Sin clasificar</option>
+              {lineas.map(l => (
+                <option value={l.id} data-nombre={l.nombre}>{l.nombre}</option>
+              ))}
+            </select>
+            <input type="hidden" name="linea" id="lineaNombre" />
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Estado -->
-    <div class="section-card">
-      <h2 class="section-title">
-        <span class="material-icons-round">toggle_on</span> Estado
-      </h2>
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.875rem;font-weight:500;">
-        <input type="checkbox" name="activo" checked /> Producto activo
-      </label>
+    <!-- TAB: Precios -->
+    <div id="tab-precios" class="tab-panel" style="display:none">
+      <div class="section-card">
+        <h2 class="section-title">
+          <span class="material-icons-round">payments</span> Costos y Precios
+        </h2>
+        <div class="form-group" style="max-width:220px;margin-bottom:20px">
+          <label>Costo <small style="color:var(--text-muted)">(base para utilidad)</small></label>
+          <input type="number" id="costo" name="costo" class="form-control" step="0.01" min="0" value="0"
+            oninput="calcPrecio('A');calcPrecio('B');calcPrecio('C')" />
+        </div>
+
+        <input type="hidden" name="precioA" id="hiddenA" />
+        <input type="hidden" name="precioB" id="hiddenB" />
+        <input type="hidden" name="precioC" id="hiddenC" />
+
+        <table class="price-table">
+          <thead>
+            <tr>
+              <th style="width:90px">Lista</th>
+              <th>Precio (sin IVA)</th>
+              <th>Utilidad %</th>
+              <th>Precio + IVA 16%</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="price-label">Precio A</span></td>
+              <td><input type="number" id="precioA" class="form-control" step="0.01" min="0" value="0" oninput="calcPrecio('A')" /></td>
+              <td><input type="number" id="utilA" class="form-control" readonly value="0.00" /></td>
+              <td><input type="number" id="ivaPA" class="form-control" readonly value="0.00" /></td>
+            </tr>
+            <tr>
+              <td><span class="price-label">Precio B</span></td>
+              <td><input type="number" id="precioB" class="form-control" step="0.01" min="0" value="0" oninput="calcPrecio('B')" /></td>
+              <td><input type="number" id="utilB" class="form-control" readonly value="0.00" /></td>
+              <td><input type="number" id="ivaPB" class="form-control" readonly value="0.00" /></td>
+            </tr>
+            <tr>
+              <td><span class="price-label">Precio C</span></td>
+              <td><input type="number" id="precioC" class="form-control" step="0.01" min="0" value="0" oninput="calcPrecio('C')" /></td>
+              <td><input type="number" id="utilC" class="form-control" readonly value="0.00" /></td>
+              <td><input type="number" id="ivaPC" class="form-control" readonly value="0.00" /></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB: Inventario -->
+    <div id="tab-inventario" class="tab-panel" style="display:none">
+      <div class="section-card">
+        <h2 class="section-title">
+          <span class="material-icons-round">inventory_2</span> Inventario
+        </h2>
+        <div class="form-grid-3">
+          <div class="form-group">
+            <label>Stock Actual</label>
+            <input type="number" name="stock" class="form-control" min="0" value="0" />
+          </div>
+          <div class="form-group">
+            <label>Mínimo de Inventario</label>
+            <input type="number" name="minimoInventario" class="form-control" min="0" step="0.01" value="0" />
+          </div>
+          <div class="form-group">
+            <label>Máximo de Inventario</label>
+            <input type="number" name="maximoInventario" class="form-control" min="0" step="0.01" value="0" />
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="actions-bar">
@@ -273,6 +301,13 @@ const [departamentos, grupos, marcas, lineas] = await Promise.all([
 </AdminLayout>
 
 <script is:inline>
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(function(el) { el.style.display = 'none'; });
+  document.querySelectorAll('.tab-btn').forEach(function(el) { el.classList.remove('active'); });
+  document.getElementById('tab-' + name).style.display = '';
+  btn.classList.add('active');
+}
+
 function showDesc(key, btn) {
   document.querySelectorAll('.desc-area').forEach(function(el) { el.style.display = 'none'; });
   document.querySelectorAll('.desc-tab').forEach(function(el) { el.classList.remove('active'); });
@@ -306,6 +341,20 @@ document.getElementById('productoForm').addEventListener('submit', function() {
 <style>
   .page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }
   h1 { font-size:1.5rem; font-weight:700; margin:0; display:flex; align-items:center; gap:8px; }
+  .tabs-nav {
+    display: flex; gap: 0; border-bottom: 2px solid var(--border);
+    margin-bottom: 24px; flex-wrap: wrap;
+  }
+  .tab-btn {
+    padding: 10px 18px; border: none; background: none; cursor: pointer;
+    font-size: 0.875rem; color: var(--text-muted); border-bottom: 3px solid transparent;
+    margin-bottom: -2px; display: flex; align-items: center; gap: 6px; font-weight: 500;
+    transition: color .15s;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+  .tab-panel { animation: fadeIn .15s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
   .section-card { background:white; border:1px solid var(--border); border-radius:var(--radius); padding:24px; margin-bottom:20px; }
   .section-title { font-size:1rem; font-weight:600; margin:0 0 16px; display:flex; align-items:center; gap:8px; }
   .form-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
@@ -320,8 +369,6 @@ document.getElementById('productoForm').addEventListener('submit', function() {
   .btn-primary:hover { background:var(--primary-dark); }
   .btn-secondary { background:white; border-color:var(--border); color:var(--text); }
   .btn-secondary:hover { background:#f8fafc; }
-  .btn-danger { background:var(--danger); color:white; }
-  .btn-danger:hover { background:#b91c1c; }
   .btn-sm { padding:4px 10px; font-size:0.8rem; }
   .actions-bar { display:flex; gap:12px; justify-content:flex-end; padding-top:8px; }
   .price-table { width:100%; border-collapse:collapse; margin-top:12px; }
@@ -332,5 +379,5 @@ document.getElementById('productoForm').addEventListener('submit', function() {
   .desc-tabs { display:flex; gap:2px; margin-bottom:12px; flex-wrap:wrap; }
   .desc-tab { padding:6px 14px; border:1px solid var(--border); border-radius:var(--radius); font-size:0.8rem; cursor:pointer; background:white; }
   .desc-tab.active { background:var(--primary); color:white; border-color:var(--primary); }
-  @media (max-width:700px) { .form-grid-2,.form-grid-3 { grid-template-columns:1fr; } }
+  @media (max-width:700px) { .form-grid-2,.form-grid-3 { grid-template-columns:1fr; } .tabs-nav { gap:0; } .tab-btn { padding:8px 12px; font-size:0.8rem; } }
 </style>
